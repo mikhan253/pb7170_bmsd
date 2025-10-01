@@ -74,7 +74,7 @@ int setup_shared_memory() {
         close(shm_fd);
         return -1;
     }
-    pdo_array = mmap(NULL, SHMEM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0)
+    pdo_array = mmap(NULL, SHMEM_SIZE, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
     if (pdo_array == MAP_FAILED) {
         perror("mmap");
         close(shm_fd);

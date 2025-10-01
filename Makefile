@@ -20,7 +20,7 @@ CFLAGS := -O2 -Wall
 
 CC ?= $(CROSS_COMPILE)gcc
 CFLAGS ?= -Wall -O2
-CFLAGS += -I/mnt/hdd/tmp/test/luckfox-pico/sysdrv/kernel/include
+CFLAGS += -I/mnt/hdd/tmp/test/luckfox-pico/sysdrv/source/kernel/include
 TARGET = bmsd
 SRC = main.c
 

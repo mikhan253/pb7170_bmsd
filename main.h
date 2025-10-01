@@ -14,18 +14,11 @@ typedef enum {
 } PB7170_Statemachine_t;
 
 typedef struct {
+    /***************** Allgemeine Informationen *****************/
     uint32_t ID;
     PB7170_Statemachine_t Statemachine;
 
-    union {
-        uint32_t MOSFet_Status;
-        struct {
-            uint32_t PRECHARGE : 1;
-            uint32_t CHARGE : 1;
-            uint32_t DISCHARGE : 1;
-        } MOSFet_Status_bits;
-    };
-
+    /***************** Fehlerbits *****************/
     union {
         uint32_t SW_AlertFlags;
         struct {
@@ -37,7 +30,6 @@ typedef struct {
             uint32_t COMM_ERR : 1;
         } SW_AlertFlags_bits;
     };
-
     union {
         uint32_t HW_AlertFlags;
         struct {
@@ -72,7 +64,6 @@ typedef struct {
             uint32_t MEAS_DONE : 1;
         } HW_AlertFlags_bits;
     };
-
     union {
         uint32_t HW_AlertState;
         struct {
@@ -101,6 +92,16 @@ typedef struct {
         } HW_AlertState_bits;
     };
 
+    /***************** Batteriemanagementstatus *****************/
+    union {
+        uint32_t MOSFet_Status;
+        struct {
+            uint32_t PRECHARGE : 1;
+            uint32_t CHARGE : 1;
+            uint32_t DISCHARGE : 1;
+        } MOSFet_Status_bits;
+    };
+
     uint32_t BalancerState;
 
     float Current;
@@ -109,10 +110,11 @@ typedef struct {
     float NTC_Temps[4];
     float DieTemp;
     float PackVoltage;
+    float AvailableChargeCurrent;
+    float AvailableDischargeCurrent;
 
+    float Capacity;
     float SOC;
     float SOH;
     float CycleCount;
-
-    float Capacity;
 } BATTERY_PDO_t;

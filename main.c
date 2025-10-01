@@ -130,5 +130,12 @@ int main() {
     }
 
     close(tfd);
+
+    // Shared Memory freigeben
+    if (pdo_array) {
+        munmap(pdo_array, SHMEM_SIZE);
+    }
+    shm_unlink(SHMEM_NAME);
+
     return 0;
 }

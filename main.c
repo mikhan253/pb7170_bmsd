@@ -6,7 +6,7 @@
 #include <sys/timerfd.h>
 #include <sys/resource.h>
 #include <sys/syscall.h>
-#include "ioprio.h"
+#include <linux/ioprio.h>
 #include <sched.h>
 
 

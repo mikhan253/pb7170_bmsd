@@ -4,6 +4,7 @@
 #include <errno.h>
 
 #include <sys/timerfd.h>
+#include <sys/resource.h>
 #include <sched.h>
 
 

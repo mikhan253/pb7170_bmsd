@@ -1,4 +1,6 @@
 CROSS_COMPILE=/mnt/hdd/tmp/test/luckfox-pico/sysdrv/source/buildroot/buildroot-2025.08/output/host/bin/arm-buildroot-linux-musleabihf-
+PUSH_MACHINE ?= root@192.168.10.161:/tmp
+
 
 # Set your cross-compiler prefix (e.g., arm-linux-gnueabihf-)
 CROSS_COMPILE ?= arm-linux-gnueabihf-
@@ -32,5 +34,8 @@ $(TARGET): $(OBJS)
 
 clean:
 	rm -f $(OBJS) $(TARGET)
+
+push:
+	ssh $(PUSH_MACHINE) "cat > $(TARGET)" < $(TARGET)
 
 .PHONY: all clean

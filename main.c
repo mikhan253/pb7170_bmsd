@@ -1,3 +1,9 @@
+#include <signal.h>
+volatile sig_atomic_t terminate = 0;
+int tfd = -1;
+void handle_signal(int sig) {
+    terminate = 1;
+}
 #include <stdio.h>
 #include <stdint.h>
 #include <unistd.h>
@@ -89,6 +95,13 @@ int setup_shared_memory() {
 }
 
 int main() {
+    // Signal-Handler für SIGINT und SIGTERM
+    struct sigaction sa;
+    sa.sa_handler = handle_signal;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    sigaction(SIGINT, &sa, NULL);
+    sigaction(SIGTERM, &sa, NULL);
 
     if (setup_process() != 0) {
         printf("Failed to setup process\n");
@@ -100,7 +113,7 @@ int main() {
     }
 
 
-    int tfd;
+    // tfd ist jetzt global
     struct itimerspec timer;
     uint64_t expirations;
 
@@ -121,15 +134,16 @@ int main() {
         return 1;
     }
 
-    while (1) {
+    while (!terminate) {
         if (read(tfd, &expirations, sizeof(expirations)) != sizeof(expirations)) {
+            if (errno == EINTR && terminate) break;
             perror("read");
             break;
         }
         cyclic_task();
     }
 
-    close(tfd);
+    if (tfd != -1) close(tfd);
 
     // Shared Memory freigeben
     if (pdo_array) {
@@ -137,5 +151,6 @@ int main() {
     }
     shm_unlink(SHMEM_NAME);
 
+    printf("Programm beendet und Ressourcen freigegeben.\n");
     return 0;
 }

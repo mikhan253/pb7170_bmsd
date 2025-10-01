@@ -1,4 +1,4 @@
-CROSS_COMPILE=/mnt/hdd/tmp/test/luckfox-pico/sysdrv/source/buildroot/buildroot-2025.08/output/host/arm-buildroot-linux-musleabihf/bin/arm-buildroot-linux-musleabihf-
+CROSS_COMPILE=/mnt/hdd/tmp/test/luckfox-pico/sysdrv/source/buildroot/buildroot-2025.08/output/host/bin/arm-buildroot-linux-musleabihf-
 
 # Set your cross-compiler prefix (e.g., arm-linux-gnueabihf-)
 CROSS_COMPILE ?= arm-linux-gnueabihf-

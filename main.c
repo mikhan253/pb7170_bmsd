@@ -5,9 +5,12 @@
 
 #include <sys/timerfd.h>
 #include <sys/resource.h>
+
 #include <sys/syscall.h>
-#include <linux/ioprio.h>
 #include <sched.h>
+
+#define IOPRIO_CLASS_SHIFT 13
+#define IOPRIO_CLASS_RT 1
 
 
 typedef enum {
@@ -162,8 +165,9 @@ int main() {
         perror("sched_setscheduler");
     }
 
-    // Setze IO-Priorität auf höchste Klasse
-    if (ioprio_set(1, 0, (1 << 13) | 0) != 0) { // IOPRIO_CLASS_RT, prio 0
+    // Setze IO-Priorität auf höchste Klasse (IOPRIO_CLASS_RT, prio 0)
+    int ioprio = (IOPRIO_CLASS_RT << IOPRIO_CLASS_SHIFT) | 0;
+    if (syscall(251, 1, 0, ioprio) != 0) { // 251 = SYS_ioprio_set
         perror("ioprio_set");
     }
 

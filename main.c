@@ -4,14 +4,7 @@
 #include <errno.h>
 
 #include <sys/timerfd.h>
-#include <sys/resource.h>
-
-#include <sys/syscall.h>
 #include <sched.h>
-
-// IO-Priorität Konstanten
-#define IOPRIO_CLASS_SHIFT 13
-#define IOPRIO_CLASS_RT 1
 
 
 typedef enum {
@@ -164,12 +157,6 @@ int main() {
     param.sched_priority = 99;
     if (sched_setscheduler(0, SCHED_FIFO, &param) != 0) {
         perror("sched_setscheduler");
-    }
-
-    // Setze IO-Priorität auf höchste Klasse (IOPRIO_CLASS_RT, prio 0)
-    int ioprio = (IOPRIO_CLASS_RT << IOPRIO_CLASS_SHIFT) | 0;
-    if (syscall(SYS_ioprio_set, 1, 0, ioprio) != 0) { // SYS_ioprio_set aus <sys/syscall.h>
-        perror("ioprio_set");
     }
 
     // Verhindere OOM-Kill

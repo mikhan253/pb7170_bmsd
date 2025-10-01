@@ -9,6 +9,7 @@
 #include <sys/syscall.h>
 #include <sched.h>
 
+// IO-Priorität Konstanten
 #define IOPRIO_CLASS_SHIFT 13
 #define IOPRIO_CLASS_RT 1
 
@@ -167,7 +168,7 @@ int main() {
 
     // Setze IO-Priorität auf höchste Klasse (IOPRIO_CLASS_RT, prio 0)
     int ioprio = (IOPRIO_CLASS_RT << IOPRIO_CLASS_SHIFT) | 0;
-    if (syscall(251, 1, 0, ioprio) != 0) { // 251 = SYS_ioprio_set
+    if (syscall(SYS_ioprio_set, 1, 0, ioprio) != 0) { // SYS_ioprio_set aus <sys/syscall.h>
         perror("ioprio_set");
     }
 

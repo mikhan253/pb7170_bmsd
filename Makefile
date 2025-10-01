@@ -18,7 +18,7 @@ CFLAGS := -O2 -Wall
 
 CC ?= $(CROSS_COMPILE)gcc
 CFLAGS ?= -Wall -O2
-TARGET = hello
+TARGET = bmsd
 SRC = main.c
 
 all:

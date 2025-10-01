@@ -24,9 +24,6 @@ SRC = main.c
 all:
 	$(CC) $(CFLAGS) -o $(TARGET) $(SRC)
 
-clean:
-	rm -f $(TARGET)
-
 $(TARGET): $(OBJS)
 	$(CC) $(CFLAGS) -o $@ $^
 

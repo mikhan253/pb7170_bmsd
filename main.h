@@ -1,3 +1,5 @@
+#define NUMBER_OF_BATTERY_PACKS 6
+
 typedef enum {
     PB7170_STATE_WAIT_INIT = 0,
     PB7170_STATE_INIT,

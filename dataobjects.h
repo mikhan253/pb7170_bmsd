@@ -1,4 +1,5 @@
-#define NUMBER_OF_BATTERY_PACKS 6
+#ifndef _DATAOBJECTS_H_
+#define _DATAOBJECTS_H_
 
 typedef enum {
     PB7170_STATE_WAIT_INIT = 0,
@@ -19,6 +20,9 @@ typedef struct {
     /***************** Allgemeine Informationen *****************/
     uint32_t ID;
     PB7170_Statemachine_t Statemachine;
+
+    /***************** Allgemeine Statusinformationen *****************/
+    uint32_t SPI_ErrorCount;
 
     /***************** Fehlerbits *****************/
     union {
@@ -120,3 +124,5 @@ typedef struct {
     float SOH;
     float CycleCount;
 } BATTERY_PDO_t;
+
+#endif

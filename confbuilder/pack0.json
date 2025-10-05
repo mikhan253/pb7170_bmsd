@@ -1,0 +1,114 @@
+{
+    "Battery Configuration":
+    {
+        "Type": "EVE MB31",
+        "Nominal Charge [Ah]": 314.0,
+        "Internal Resistance [Ohm]": 0.18e-3,
+        "Max Charge Current [dC, A]": [
+            [-10, 0.0],
+            [  0, 0.05],
+            [  5, 0.12],
+            [ 10, 0.3],
+            [ 15, 0.5],
+            [ 60, 0.0]
+        ],
+        "Max Discharge Current [dC, A]": [
+            [-30, 0.0],
+            [-20, 0.5],
+            [ 60, 0.0]
+        ],
+        "Balancer Cell Startvoltage [V]": 3.45,
+        "Balancer Cell max Deltavoltage [V]": 10e-3
+    },
+    "User Configuration":
+    {
+        "Charger Detection": true,
+        "Load Detection": true,
+        "Precharge Mosfet": [
+        "Pack Low Voltage",
+        "Charge Overcurrent",
+        "Discharge Overcurrent",
+        "Short Circuit",
+        "Cell Undervoltage",
+        "Cell Overvoltage",
+        "Watchdog"
+        ],
+        "Discharge Mosfet": [
+        "Discharge Overcurrent",
+        "Short Circuit",
+        "Cell Undervoltage",
+        "Watchdog"
+        ],
+        "Charge Mosfet": [
+        "Pack Low Voltage",
+        "Charge Overcurrent",
+        "Cell Overvoltage",
+        "Watchdog"
+        ],
+        "Alert": [
+        "Load Detection",
+        "Charge Detection",
+        "Pack Low Voltage",
+        "Cell Overvoltage",
+        "Cell Undervoltage",
+        "PVDD Under/Overvoltage",
+        "Short Circuit",
+        "Discharge Overcurrent",
+        "Charge Overcurrent",
+        "AUXIN Undervoltage",
+        "AUXIN Overvoltage",
+        "Pack Overvoltage",
+        "Pack Undervoltage",
+        "Die Overtemperature",
+        "Die Undertemperature",
+        "Cell Mismatch",
+        "SPI CRC error"
+        ],
+        "Cell Overvoltage Set/Clear [V]": [ 3.648, 3.548 ],
+        "Cell Undervoltage Set/Clear [V]": [ 2.5, 2.6 ],
+        "Cell Low Voltage Prohibit Charge [V]": 1.9968,
+        "Pack Under/Overvoltage [V]": [ 42.0, 56.8 ],
+        "Max Cell Mismatch Voltage [V]": 0.48,
+        "Cell Overvoltage/Undervoltage protection delay [cnt]": 8,
+        "Die Under/Overtemperature [degC]": [ -10.0, 70.0 ],
+        "AUXIN Voltage Range [V]": [
+        [ 1.0, 4.0 ],
+        [ 1.0, 4.0 ],
+        [ 1.0, 4.0 ],
+        [ 1.0, 4.0 ]
+        ],
+        "Charge Overcurrent [A]": 100,
+        "Short Circuit Current [A]": 320,
+        "Discharge Overcurrent [A]": 140,
+
+        "Charge and Discharge Detection and Protection": true,
+        "Discharge overcurrent protection delay time [ms]":  320,
+        "Charge overcurrent protection delay time [ms]":  320,
+        "Discharge Short protection delay time [us]":  4,
+
+        "Shunt amplification fast current": 16,
+        "VADC Conversion Speed": 4096,
+        "CADC Period [ms]": 250,
+
+        "Scheduler": {
+            "Enable": true,
+            "Current Measurement Period": 4,
+            "AUXIN Measurement Period": 4,
+            "Die Temperature Measurement Period": 4,
+            "VPDD Measurement Period": 4,
+            "SCAN Period": 4
+        }
+    },
+    "Hardware Configuration":
+    {
+        "Shunt Resistance": 0.5e-3,
+        "NTC Polynom": [
+            -6.419316075453663e-45, -6.977648919699077e-38, 
+            1.6311547264568302e-32, -1.6128696273998575e-27, 
+            8.861620590817755e-23, -2.9704202387253455e-18, 
+            6.280911244114167e-14, -8.401600847433741e-10, 
+            7.0101603206460145e-06, -0.03748737587436205,
+            168.75362960839593
+        ]
+    }
+}

@@ -66,7 +66,7 @@ int main(void) {
         read(timer_fd, &expirations, sizeof(expirations));  // blockiert bis Timer feuert
         if (expirations == 1)
         {
-            uint32_t ret, counta=0;
+            uint32_t ret;
             uint16_t data[32];
 
             switch(battery_data[BatteryPackCounter].Statemachine) {
@@ -86,9 +86,18 @@ int main(void) {
                     break;
                 case PB7170_STATE_INIT:
                     pb7170_spi_write_register(0x45,0x95); // USER Unlock
-                    for (int i = 0; i < 6; i++)
-                    printf("%02X: %02X ", (unsigned int)battery_userconfig[BatteryPackCounter][0], (unsigned int)battery_userconfig[BatteryPackCounter][1]<<8 | (unsigned int)battery_userconfig[BatteryPackCounter][2]);
+                    for (uint32_t i = 0; battery_userconfig[BatteryPackCounter][i]>0; i+=3) {
+                        uint16_t confdata = (uint16_t)battery_userconfig[BatteryPackCounter][i+1] | ((uint16_t)battery_userconfig[BatteryPackCounter][i+2]<<8);
+                        uint16_t readback;
+                        pb7170_spi_write_register(battery_userconfig[BatteryPackCounter][i], confdata);
 
+                        if (pb7170_spi_read_register(battery_userconfig[BatteryPackCounter][i], &readback, 1))
+                            battery_data[BatteryPackCounter].SPI_ErrorCount++;
+                        else
+                            if (confdata != readback)
+                                printf("Fehler beim Schreiben der Userconfig an Adresse %02X: Gesendet %02X, gelesen %02X\n", (unsigned int)battery_userconfig[BatteryPackCounter][i], (unsigned int)confdata, (unsigned int)readback);
+                    }
+                    printf("Userconfig erfolgreich geschrieben\n");
                     battery_data[BatteryPackCounter].Statemachine = PB7170_STATE_CONFIG;
 
                     break;

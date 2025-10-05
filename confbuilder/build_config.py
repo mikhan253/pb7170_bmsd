@@ -413,6 +413,7 @@ with open(FILENAME, 'wb') as f:
     for addr, value in zip(userconfig_addresses, userconfig_blob):
         print(f"{addr:02X}:{value:04X} ", end='')
         f.write(struct.pack('<BH', addr, value))
+    f.write(struct.pack('<BH', 0, 0))
     print()
 ###################################################
 ## NTC POLYNOM                                   ##

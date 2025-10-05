@@ -1,4 +1,7 @@
 #include <stdint.h>
+#include <stddef.h>
+#include <fcntl.h>
+#include <unistd.h>
 #include <linux/spi/spidev.h>
 #include <sys/ioctl.h>
 
@@ -52,29 +55,29 @@ int spi_init(const char *device, uint32_t speed, uint8_t mode, uint8_t bits)
     spi_tr.speed_hz = speed;
     spi_tr.bits_per_word = bits;
 
-    int fd = open(device, O_RDWR);
-    if (fd < 0)
+    spi_fd = open(device, O_RDWR);
+    if (spi_fd < 0)
         return -1;
 
     // Mode setzen (z. B. SPI_MODE_0)
-    if (ioctl(fd, SPI_IOC_WR_MODE, &mode) < 0) {
-        close(fd);
-        return -1;
+    if (ioctl(spi_fd, SPI_IOC_WR_MODE, &mode) < 0) {
+        close(spi_fd);
+        return -2;
     }
 
     // Bits pro Wort (typisch 8)
-    if (ioctl(fd, SPI_IOC_WR_BITS_PER_WORD, &bits) < 0) {
-        close(fd);
-        return -1;
+    if (ioctl(spi_fd, SPI_IOC_WR_BITS_PER_WORD, &bits) < 0) {
+        close(spi_fd);
+        return -3;
     }
 
     // Maximalgeschwindigkeit (Hz)
-    if (ioctl(fd, SPI_IOC_WR_MAX_SPEED_HZ, &speed) < 0) {
-        close(fd);
-        return -1;
+    if (ioctl(spi_fd, SPI_IOC_WR_MAX_SPEED_HZ, &speed) < 0) {
+        close(spi_fd);
+        return -4;
     }
 
-    return fd; // File-Descriptor zurückgeben
+    return 0;
 }
 
 static inline uint8_t pb7170_crc8(const void *data, uint_fast8_t len)
@@ -95,8 +98,7 @@ static inline uint8_t pb7170_crc8(const void *data, uint_fast8_t len)
     return crc;
 }
 
-int pb7170_spi_read_register(int fd, uint8_t reg_addr, uint16_t* output, 
-                             uint_fast8_t count) 
+int pb7170_spi_read_register(uint8_t reg_addr, uint16_t* output, uint_fast8_t count) 
 {
     if (count > 32) 
         return -1; // Maximale Anzahl überschritten
@@ -105,21 +107,21 @@ int pb7170_spi_read_register(int fd, uint8_t reg_addr, uint16_t* output,
     spi_tr.len = tx_len;
 
     // Header setzen
-    tx[0] = (reg_addr & 0x7F) << 1;
-    tx[1] = ((count - 1) & 0x1F) | (reg_addr & 0x80);
+    spi_tx_buf[0] = (reg_addr & 0x7F) << 1;
+    spi_tx_buf[1] = ((count - 1) & 0x1F) | (reg_addr & 0x80);
 
     // SPI-Transfer durchführen
-    if (ioctl(fd, SPI_IOC_MESSAGE(1), &tr) < 0)
+    if (ioctl(spi_fd, SPI_IOC_MESSAGE(1), &spi_tr) < 0)
         return -2; // SPI Fehler
 
     // Header für CRC prüfen
-    rx[0] = tx[0];
-    rx[1] = tx[1];
-    if (pb7170_crc8(rx, tx_len))
+    spi_rx_buf[0] = spi_tx_buf[0];
+    spi_rx_buf[1] = spi_tx_buf[1];
+    if (pb7170_crc8(spi_rx_buf, tx_len))
         return -3; // CRC Fehler
 
     // Pointer-basiert Daten aus RX extrahieren (big-endian)
-    const uint8_t *p = &rx[2];
+    const uint8_t *p = &spi_rx_buf[2];
     for (uint_fast8_t i = 0; i < count; i++) {
         output[i] = ((uint16_t)p[0] << 8) | p[1];
         p += 2;
@@ -128,20 +130,20 @@ int pb7170_spi_read_register(int fd, uint8_t reg_addr, uint16_t* output,
     return 0; // Erfolg
 }
 
-int pb7170_spi_write_register(int fd, uint8_t reg_addr, uint16_t data) 
+int pb7170_spi_write_register(uint8_t reg_addr, uint16_t data) 
 {
-    spi_tr.len = 4,
+    spi_tr.len = 4;
 
     // Header setzen
-    tx[0] = ((reg_addr & 0x7F) << 1) | 1;
+    spi_tx_buf[0] = ((reg_addr & 0x7F) << 1) | 1;
     // Daten setzen
-    tx[1] = data >> 8;
-    tx[2] = data & 0xFF;
+    spi_tx_buf[1] = data >> 8;
+    spi_tx_buf[2] = data & 0xFF;
     // CRC setzen
-    tx[3] = pb7170_crc8(tx, 3);
+    spi_tx_buf[3] = pb7170_crc8(spi_tx_buf, 3);
 
     // SPI-Transfer durchführen
-    if (ioctl(fd, SPI_IOC_MESSAGE(1), &tr) < 0)
+    if (ioctl(spi_fd, SPI_IOC_MESSAGE(1), &spi_tr) < 0)
         return -2; // SPI Fehler
 
     return 0; // Erfolg

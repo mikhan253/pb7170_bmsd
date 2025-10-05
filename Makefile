@@ -9,7 +9,7 @@ CXX := $(CROSS_COMPILE)g++
 AR := $(CROSS_COMPILE)ar
 
 # Source files
-SRCS := main.c
+SRCS := main.c tasksetup.c spi.c
 OBJS := $(SRCS:.c=.o)
 
 # Output binary
@@ -21,7 +21,7 @@ CFLAGS := -O2 -Wall
 CC ?= $(CROSS_COMPILE)gcc
 CFLAGS ?= -Wall -O2
 TARGET = bmsd
-SRC = main.c tasksetup.c
+SRC = main.c tasksetup.c spi.c
 
 all:
 	$(CC) $(CFLAGS) -o $(TARGET) $(SRC)

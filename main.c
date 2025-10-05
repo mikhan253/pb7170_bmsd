@@ -3,13 +3,17 @@
 #include <stdint.h>
 
 #include "tasksetup.h"
-
-int spi_fd = -1;
+#include "spi.h"
 
 int main(void) {
+    uint16_t data;
 
     if (setup_task(250)) {
         printf("Failed to set up task\n");
+        return 1;
+    }
+    if (spi_init("/dev/spidev0.0", 1000000, 0, 8)) {
+        printf("Failed to initialize SPI\n");
         return 1;
     }
 
@@ -18,7 +22,8 @@ int main(void) {
         read(timer_fd, &expirations, sizeof(expirations));  // blockiert bis Timer feuert
         if (expirations == 1)
         {
-            printf("Timer expired once\n");
+            pb7170_spi_read_register(0x01, &data, 1);
+            printf("Timer expired once: 0x%04X\n", data);
         }
         else
             printf("Timer expired %llu times\n", (unsigned long long)expirations);

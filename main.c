@@ -3,12 +3,24 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <sys/stat.h>
+#include <math.h>
 
 #include "tasksetup.h"
 #include "spi.h"
 
 #include "dataobjects.h"
 
+float ntc_to_temperature(float value, const float *NTC_CURVE, int curve_len)
+{
+    float result = 0.0f;
+    int n = curve_len - 1;
+
+    for (int i = 0; i < curve_len; i++) {
+        result += NTC_CURVE[i] * powf(value, (float)(n - i));
+    }
+
+    return result;
+}
 
 int pb7170_init(int pack_id) {
     uint32_t i = 0;
@@ -22,9 +34,8 @@ int pb7170_init(int pack_id) {
         while (battery_userconfig_blob[pack_id][block_start + block_length].address ==
                battery_userconfig_blob[pack_id][block_start + block_length - 1].address + 1 &&
                block_length < 32 &&
-               battery_userconfig_blob[pack_id][block_start + block_length].address > 0) {
+               battery_userconfig_blob[pack_id][block_start + block_length].address > 0)
             block_length++;
-        }
 
         // Schreibe die Register einzeln (wie bisher)
         for (uint32_t j = 0; j < block_length; j++) {
@@ -36,21 +47,16 @@ int pb7170_init(int pack_id) {
 
         // Lese den ganzen Block auf einmal
         uint16_t readback_block[32]; // max Blockgröße
-        if (pb7170_spi_read_register(
+        pb7170_spi_read_register(
                 battery_userconfig_blob[pack_id][block_start].address,
                 readback_block,
                 block_length
-            )) {
-            battery_pdo_data[pack_id].SPI_ErrorCount++;
-            return -1;
-        }
+            );
 
         // Vergleiche jedes Register im Block
-        for (uint32_t j = 0; j < block_length; j++) {
-            if (battery_userconfig_blob[pack_id][block_start + j].data != readback_block[j]) {
+        for (uint32_t j = 0; j < block_length; j++)
+            if (battery_userconfig_blob[pack_id][block_start + j].data != readback_block[j])
                 return -1;
-            }
-        }
 
         i += block_length; // Nächster Block
     }
@@ -65,26 +71,23 @@ int pb7170_readdata(int pack_id) {
     battery_pdo_data[pack_id].HW_Status = data[0];
     battery_pdo_data[pack_id].HW_AlertFlags = (data[2] << 16) | data[1];
     battery_pdo_data[pack_id].HW_AlertState = (data[5] << 16) | data[4];
-    battery_pdo_data[pack_id].HW_Alert_CellOvervoltage = data[6];
-    battery_pdo_data[pack_id].HW_Alert_CellUndervoltage = data[7];
+    battery_pdo_data[pack_id].HW_Alert_CellUnderOvervoltage = (data[7] << 16) | data[6];
     battery_pdo_data[pack_id].HW_AlertAux = data[9];
     battery_pdo_data[pack_id].HW_BalanceTimer = data[14];
     battery_pdo_data[pack_id].HW_BalanceStatus = data[15];
 
     pb7170_spi_read_register(0x84, data, 28);
     battery_pdo_data[pack_id].Current = (float)((int16_t)data[0]) * battery_generalconfig_blob[pack_id]->current_cadc_factor;
-    battery_pdo_data[pack_id].FastCurrent = (float)(data[27] & 0x7fff) * battery_generalconfig_blob[pack_id]->current_vadc_factor;
-    if (data[27] & 0x8000)
-        battery_pdo_data[pack_id].FastCurrent = -battery_pdo_data[pack_id].FastCurrent;
-    
     battery_pdo_data[pack_id].PackVoltage = (float)data[1] * 1.6e-3;
     battery_pdo_data[pack_id].PVDDVoltage = (float)data[2] * 2.5e-3;
     for(int i=0; i < 16; i++)
         battery_pdo_data[pack_id].V_Cells[i] = (float)data[3 + i] * 100e-6;
-
-    //for i in range(4):
-    //    self.Temperatures[i] = self.ntc_to_temperature(data[20 + i])
+    for(int i=0; i < 4; i++)
+        battery_pdo_data[pack_id].NTC_Temperatures[i] = ntc_to_temperature((float)data[20 + i], battery_generalconfig_blob[pack_id]->ntc_polynom, 11);
     battery_pdo_data[pack_id].DieTemp = (float)(25437 - data[26]) / 59.17 - 64.5;
+    battery_pdo_data[pack_id].FastCurrent = (float)(data[27] & 0x7fff) * battery_generalconfig_blob[pack_id]->current_vadc_factor;
+    if (data[27] & 0x8000)
+        battery_pdo_data[pack_id].FastCurrent = -battery_pdo_data[pack_id].FastCurrent;
 
     return 0;
 }
@@ -112,18 +115,16 @@ int main(void) {
 
             switch(battery_pdo_data[BatteryPackCounter].Statemachine) {
                 case PB7170_STATE_WAIT_INIT:
-                    if (pb7170_spi_read_register(0x00, &read_data, 1))
-                        battery_pdo_data[BatteryPackCounter].SPI_ErrorCount++;
-                    else 
-                        if (read_data == 0x6000) { /* TOP_STATUS muss auf Power-up Complete sein */
-                            printf("PACK%u: PB7170 gefunden, initialisiere...\n", battery_pdo_data[BatteryPackCounter].ID);
+                    pb7170_spi_read_register(0x00, &read_data, 1);
+                    if (read_data == 0x6000) { /* TOP_STATUS muss auf Power-up Complete sein */
+                        printf("PACK%u: PB7170 gefunden, initialisiere...\n", battery_pdo_data[BatteryPackCounter].ID);
 
-                            /* Safe Mode */
-                            pb7170_spi_write_register(0x13, 0); // Alle MOSFETs aus
-                            pb7170_spi_write_register(0x0c, 0); // Alle Balancer aus
+                        /* Safe Mode */
+                        pb7170_spi_write_register(0x13, 0); // Alle MOSFETs aus
+                        pb7170_spi_write_register(0x0c, 0); // Alle Balancer aus
 
-                            battery_pdo_data[BatteryPackCounter].Statemachine = PB7170_STATE_INIT;
-                        }
+                        battery_pdo_data[BatteryPackCounter].Statemachine = PB7170_STATE_INIT;
+                    }
                     break;
                 case PB7170_STATE_INIT:
                     pb7170_spi_write_register(0x45,0x95); // USER Unlock

@@ -117,24 +117,23 @@ typedef struct {
             uint32_t CLOCK_ABNORMAL : 1;
         } HW_AlertState_bits;
     };
-    uint16_t HW_Alert_CellOvervoltage; /* PB7170 ALRT_OVCELL 0x07 */
-    uint16_t HW_Alert_CellUndervoltage; /* PB7170 ALRT_OVCELL 0x08 */
+    uint32_t HW_Alert_CellUnderOvervoltage; /* PB7170 ALRT_OVCELL 0x07 ALRT_UVCELL 0x08 */
     union {
-        uint16_t HW_AlertAux; /* PB7170 ALRT_AUX 0x0A */
+        uint32_t HW_AlertAux; /* PB7170 ALRT_AUX 0x0A */
         struct {
-            uint16_t AUXIN1_OV : 1;
-            uint16_t AUXIN2_OV : 1;
-            uint16_t AUXIN3_OV : 1;
-            uint16_t AUXIN4_OV : 1;
-            uint16_t reserved1 : 4;
-            uint16_t AUXIN1_UV : 1;
-            uint16_t AUXIN2_UV : 1;
-            uint16_t AUXIN3_UV : 1;
-            uint16_t AUXIN4_UV : 1;
+            uint32_t AUXIN1_OV : 1;
+            uint32_t AUXIN2_OV : 1;
+            uint32_t AUXIN3_OV : 1;
+            uint32_t AUXIN4_OV : 1;
+            uint32_t reserved1 : 4;
+            uint32_t AUXIN1_UV : 1;
+            uint32_t AUXIN2_UV : 1;
+            uint32_t AUXIN3_UV : 1;
+            uint32_t AUXIN4_UV : 1;
         } HW_AlertAux_bits;
     };
-    uint16_t HW_BalanceTimer; /* PB7170 BLSW_CMD 0x0F */
-    uint16_t HW_BalanceStatus; /* PB7170 BLSW_STAT 0x10 */
+    uint32_t HW_BalanceTimer; /* PB7170 BLSW_CMD 0x0F */
+    uint32_t HW_BalanceStatus; /* PB7170 BLSW_STAT 0x10 */
     /***************** Batteriemanagementstatus *****************/
     union {
         uint32_t MOSFet_Status;
@@ -150,7 +149,7 @@ typedef struct {
     float Current;
     float FastCurrent;
     float V_Cells[16];
-    float NTC_Temps[4];
+    float NTC_Temperatures[4];
     float DieTemp;
     float PackVoltage;
     float PVDDVoltage;

@@ -72,14 +72,13 @@ int pb7170_readdata(int pack_id) {
     battery_pdo_data[pack_id].HW_BalanceStatus = data[15];
 
     pb7170_spi_read_register(0x84, data, 28);
-    battery_pdo_data[pack_id].Current = (float)(int16_t)data[0] * battery_generalconfig_blob[pack_id]->current_cadc_factor;
+    battery_pdo_data[pack_id].Current = (float)((int16_t)data[0]) * battery_generalconfig_blob[pack_id]->current_cadc_factor;
     battery_pdo_data[pack_id].FastCurrent = (float)(data[27] & 0x7fff) * battery_generalconfig_blob[pack_id]->current_vadc_factor;
     if (data[27] & 0x8000)
         battery_pdo_data[pack_id].FastCurrent = -battery_pdo_data[pack_id].FastCurrent;
     
     battery_pdo_data[pack_id].PackVoltage = (float)data[1] * 1.6e-3;
     battery_pdo_data[pack_id].PVDDVoltage = (float)data[2] * 2.5e-3;
-
     for(int i=0; i < 16; i++)
         battery_pdo_data[pack_id].V_Cells[i] = (float)data[3 + i] * 100e-6;
 

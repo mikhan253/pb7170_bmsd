@@ -190,7 +190,7 @@ typedef struct {
     float pvdd_gain;
 } BATTERY_CALIBRATION_t;
 
-extern BATTERY_PDO_t battery_pdo_data[MAX_BATTERY_PACKS];
+extern BATTERY_PDO_t* battery_pdo_data;
 extern BATTERY_USERCONF_BLOB_t* battery_userconfig_blob[MAX_BATTERY_PACKS];
 extern BATTERY_GENERALCONF_t*   battery_generalconfig_blob[MAX_BATTERY_PACKS];
 extern BATTERY_CALIBRATION_t*   battery_calibration_blob[MAX_BATTERY_PACKS];

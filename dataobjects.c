@@ -3,11 +3,13 @@
 #include <stdint.h>
 #include <string.h>
 #include <sys/stat.h>
-
+#include <fcntl.h>      // für shm_open
+#include <sys/mman.h>   // für mmap
+#include <unistd.h>     // für ftruncate
 #include "dataobjects.h"
 
 // SHMEM Objekt
-BATTERY_PDO_t battery_pdo_data[MAX_BATTERY_PACKS];
+BATTERY_PDO_t* battery_pdo_data = NULL;
 
 // Globale Arrays
 BATTERY_USERCONF_BLOB_t* battery_userconfig_blob[MAX_BATTERY_PACKS];
@@ -15,8 +17,10 @@ BATTERY_GENERALCONF_t*   battery_generalconfig_blob[MAX_BATTERY_PACKS];
 BATTERY_CALIBRATION_t*   battery_calibration_blob[MAX_BATTERY_PACKS];
 uint16_t battery_enabled = 0;
 
-// ---------------------------------------------------------
+// SHMEM Konfiguration
+#define SHM_NAME "/battery_pdo_shm"
 
+// ---------------------------------------------------------
 // generische Datei-Ladefunktion
 static void* load_binary_file(
     const char* filename,
@@ -34,14 +38,12 @@ static void* load_binary_file(
     if (st.st_size <= 0)
         return NULL;
 
-    // Prüfung für Typen mit fixer Größe (z.B. calibration / generalconf)
     if (require_exact_size && (size_t)st.st_size != element_size) {
         printf("⚠️  '%s' hat falsche Größe: erwartet %zu, ist %ld Bytes\n",
                filename, element_size, (long)st.st_size);
         return NULL;
     }
 
-    // Prüfung für Typen mit variabler Anzahl (nur userconf)
     if (!require_exact_size && (st.st_size % element_size) != 0)
         return NULL;
 
@@ -64,7 +66,6 @@ static void* load_binary_file(
         return NULL;
     }
 
-    // --- Terminierungsprüfung (nur für userconf)
     if (check_terminator) {
         BATTERY_USERCONF_BLOB_t* arr = (BATTERY_USERCONF_BLOB_t*)buf;
         BATTERY_USERCONF_BLOB_t last = arr[num_elements - 1];
@@ -74,7 +75,6 @@ static void* load_binary_file(
         }
     }
 
-    // --- Duplikaterkennung
     for (int j = 0; j < count; j++) {
         if (existing_ptrs[j] && memcmp(existing_ptrs[j], buf, st.st_size) == 0) {
             *is_duplicate = j;
@@ -95,19 +95,48 @@ static void print_load_status(const char* filename, int duplicate_of) {
         printf("- %s geladen\n", filename);
 }
 
+// ---------------------------------------------------------
+// SHMEM initialisieren
+static int init_shmem(void) {
+    int shm_fd = shm_open(SHM_NAME, O_CREAT | O_RDWR, 0666);
+    if (shm_fd < 0) {
+        perror("shm_open");
+        return -1;
+    }
+
+    if (ftruncate(shm_fd, sizeof(BATTERY_PDO_t) * MAX_BATTERY_PACKS) != 0) {
+        perror("ftruncate");
+        close(shm_fd);
+        return -1;
+    }
+
+    battery_pdo_data = mmap(NULL, sizeof(BATTERY_PDO_t) * MAX_BATTERY_PACKS,
+                            PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
+    if (battery_pdo_data == MAP_FAILED) {
+        perror("mmap");
+        close(shm_fd);
+        return -1;
+    }
+
+    close(shm_fd);
+    return 0;
+}
+
 void load_battery_all_configs(void)
 {
-    char filename[64];  // nur ein Buffer
-    battery_enabled = 0;  // Alle Packs zunächst deaktivieren
+    if (init_shmem() != 0) {
+        printf("Fehler: SHMEM konnte nicht initialisiert werden.\n");
+        return;
+    }
+
+    char filename[64];
+    battery_enabled = 0;
 
     printf("Lade Konfigurationsdateien...\n");
     for (int i = 0; i < MAX_BATTERY_PACKS; i++) {
         battery_pdo_data[i].ID = i;
         battery_pdo_data[i].Statemachine = PB7170_STATE_DISABLED;
 
-        // =========================
-        // 1️⃣ Prüfen, ob alle 3 Dateien existieren
-        // =========================
         struct stat st;
         snprintf(filename, sizeof(filename), "pack%d_userconf.bin", i);
         if (stat(filename, &st) != 0) continue;
@@ -120,10 +149,6 @@ void load_battery_all_configs(void)
 
         int duplicate_of;
 
-        // =========================
-        // 2️⃣ Dateien laden
-        // =========================
-        // --- USERCONF
         snprintf(filename, sizeof(filename), "pack%d_userconf.bin", i);
         duplicate_of = -1;
         battery_userconfig_blob[i] = load_binary_file(
@@ -138,7 +163,6 @@ void load_battery_all_configs(void)
         if (!battery_userconfig_blob[i]) continue;
         print_load_status(filename, duplicate_of);
 
-        // --- GENERALCONF
         snprintf(filename, sizeof(filename), "pack%d_generalconf.bin", i);
         duplicate_of = -1;
         battery_generalconfig_blob[i] = load_binary_file(
@@ -153,7 +177,6 @@ void load_battery_all_configs(void)
         if (!battery_generalconfig_blob[i]) continue;
         print_load_status(filename, duplicate_of);
 
-        // --- CALIBRATION
         snprintf(filename, sizeof(filename), "pack%d_calibration.bin", i);
         duplicate_of = -1;
         battery_calibration_blob[i] = load_binary_file(
@@ -168,16 +191,10 @@ void load_battery_all_configs(void)
         if (!battery_calibration_blob[i]) continue;
         print_load_status(filename, duplicate_of);
 
-        // =========================
-        // 3️⃣ Pack ist vollständig geladen → aktiv setzen
-        // =========================
         battery_enabled |= (1 << i);
         battery_pdo_data[i].Statemachine = PB7170_STATE_WAIT_INIT;
     }
 
-    // =========================
-    // Zusammenfassung aller aktiven Packs
-    // =========================
     for (int i = 0; i < MAX_BATTERY_PACKS; i++)
         if (battery_enabled & (1 << i)) 
             printf("Pack %d aktiviert\n", i);

@@ -455,27 +455,17 @@ with open(FILENAME, 'wb') as datei:
 FILENAME=f'pack{ID}_calibration.bin'
 print(FILENAME)
 calibration_blob = array.array('f', [
-    #float cadc_offset;
-    0,
-    #float vadc_offset;
-    0,
-    #float ntc_offset[4];
-    0,0,0,0,
-    #float cell_offset[16];
-    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-    #float pvdd_offset;
-    0,0,0,0,
-    #float cadc_gain;
-    1,
-    #float vadc_gain;
-    1,
-    #float ntc_gain[4];
-    1,1,1,1,
-    #float cell_gain[16];
-    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
-    #float pvdd_gain;
-    1
-    ])
+    0,          # cadc_offset
+    0,          # vadc_offset
+    0,0,0,0,    # ntc_offset[4]
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,  # cell_offset[16]
+    0,          # pvdd_offset
+    1,          # cadc_gain
+    1,          # vadc_gain
+    1,1,1,1,    # ntc_gain[4]
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,  # cell_gain[16]
+    1           # pvdd_gain
+])
 print("->", ' '.join(f"{x:.3e}" for x in calibration_blob))
 with open(FILENAME, 'wb') as datei:
     calibration_blob.tofile(datei)

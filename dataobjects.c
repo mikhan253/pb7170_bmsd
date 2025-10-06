@@ -87,11 +87,20 @@ static void* load_binary_file(
     return buf;
 }
 
+// Helferfunktion für Statusmeldungen
+static void print_load_status(const char* filename, int duplicate_of) {
+    if (duplicate_of >= 0)
+        printf("- %s identisch mit pack%d\n", filename, duplicate_of);
+    else
+        printf("- %s geladen\n", filename);
+}
+
 void load_battery_all_configs(void)
 {
-    char filename[64];
+    char filename[64];  // nur ein Buffer
     battery_enabled = 0;  // Alle Packs zunächst deaktivieren
 
+    printf("Lade Konfigurationsdateien...\n");
     for (int i = 0; i < MAX_BATTERY_PACKS; i++) {
         battery_pdo_data[i].ID = i;
         battery_pdo_data[i].Statemachine = PB7170_STATE_DISABLED;
@@ -99,22 +108,21 @@ void load_battery_all_configs(void)
         // =========================
         // 1️⃣ Prüfen, ob alle 3 Dateien existieren
         // =========================
-        struct stat st_user, st_gen, st_cal;
-
+        struct stat st;
         snprintf(filename, sizeof(filename), "pack%d_userconf.bin", i);
-        if (stat(filename, &st_user) != 0) continue;
+        if (stat(filename, &st) != 0) continue;
 
         snprintf(filename, sizeof(filename), "pack%d_generalconf.bin", i);
-        if (stat(filename, &st_gen) != 0) continue;
+        if (stat(filename, &st) != 0) continue;
 
         snprintf(filename, sizeof(filename), "pack%d_calibration.bin", i);
-        if (stat(filename, &st_cal) != 0) continue;
+        if (stat(filename, &st) != 0) continue;
 
-        // =========================
-        // 2️⃣ Alle Dateien existieren → jetzt einlesen
-        // =========================
         int duplicate_of;
 
+        // =========================
+        // 2️⃣ Dateien laden
+        // =========================
         // --- USERCONF
         snprintf(filename, sizeof(filename), "pack%d_userconf.bin", i);
         duplicate_of = -1;
@@ -127,11 +135,8 @@ void load_battery_all_configs(void)
             1,
             0
         );
-        if (!battery_userconfig_blob[i]) continue;  // fehlgeschlagen, Pack überspringen
-        if (duplicate_of >= 0)
-            printf("🔁 pack%d_userconf.bin identisch mit pack%d_userconf.bin\n", i, duplicate_of);
-        else
-            printf("✅ pack%d_userconf.bin geladen\n", i);
+        if (!battery_userconfig_blob[i]) continue;
+        print_load_status(filename, duplicate_of);
 
         // --- GENERALCONF
         snprintf(filename, sizeof(filename), "pack%d_generalconf.bin", i);
@@ -146,10 +151,7 @@ void load_battery_all_configs(void)
             1
         );
         if (!battery_generalconfig_blob[i]) continue;
-        if (duplicate_of >= 0)
-            printf("🔁 pack%d_generalconf.bin identisch mit pack%d_generalconf.bin\n", i, duplicate_of);
-        else
-            printf("✅ pack%d_generalconf.bin geladen\n", i);
+        print_load_status(filename, duplicate_of);
 
         // --- CALIBRATION
         snprintf(filename, sizeof(filename), "pack%d_calibration.bin", i);
@@ -164,10 +166,7 @@ void load_battery_all_configs(void)
             1
         );
         if (!battery_calibration[i]) continue;
-        if (duplicate_of >= 0)
-            printf("🔁 pack%d_calibration.bin identisch mit pack%d_calibration.bin\n", i, duplicate_of);
-        else
-            printf("✅ pack%d_calibration.bin geladen\n", i);
+        print_load_status(filename, duplicate_of);
 
         // =========================
         // 3️⃣ Pack ist vollständig geladen → aktiv setzen
@@ -177,7 +176,9 @@ void load_battery_all_configs(void)
     }
 
     // =========================
-    // 4️⃣ Zusammenfassung aller aktiven Packs
+    // Zusammenfassung aller aktiven Packs
     // =========================
-    printf("🔋 battery_enabled = 0x%04X\n", battery_enabled);
+    for (int i = 0; i < MAX_BATTERY_PACKS; i++)
+        if (battery_enabled & (1 << i)) 
+            printf("Pack %d aktiviert\n", i);
 }

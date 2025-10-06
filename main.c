@@ -37,7 +37,7 @@ int main(void) {
                         battery_pdo_data[BatteryPackCounter].SPI_ErrorCount++;
                     else 
                         if (data[0] == 0x6000) { /* TOP_STATUS muss auf Power-up Complete sein */
-                            printf("PB7170 (ID=%u) gefunden, initialisiere...\n", battery_pdo_data[BatteryPackCounter].ID);
+                            printf("PACK%u: PB7170 gefunden, initialisiere...\n", battery_pdo_data[BatteryPackCounter].ID);
 
                             /* Safe Mode */
                             pb7170_spi_write_register(0x13, 0); // Alle MOSFETs aus

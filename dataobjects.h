@@ -23,9 +23,10 @@ typedef struct {
     /***************** Allgemeine Informationen *****************/
     uint32_t ID;
     PB7170_Statemachine_t Statemachine;
+    uint32_t AliveCounter;
 
     /***************** Allgemeine Statusinformationen *****************/
-    uint32_t SPI_ErrorCount;
+    uint32_t SPI_Retries;
 
     /***************** SW zeug *****************/
     union {
@@ -38,6 +39,9 @@ typedef struct {
             uint32_t UNDERTEMP : 1;
             uint32_t COMM_ERR : 1;
         } SW_AlertFlags_bits;
+    };
+    union {
+        uint32_t SW_WarningFlags;
     };
 
     /***************** HW zeug *****************/
@@ -196,4 +200,5 @@ extern BATTERY_CALIBRATION_t*   battery_calibration_blob[MAX_BATTERY_PACKS];
 extern uint16_t battery_enabled;
 
 void load_battery_all_configs(void);
+
 #endif

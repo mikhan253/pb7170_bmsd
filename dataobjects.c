@@ -39,7 +39,7 @@ static void* load_binary_file(
         return NULL;
 
     if (require_exact_size && (size_t)st.st_size != element_size) {
-        printf("⚠️  '%s' hat falsche Größe: erwartet %zu, ist %ld Bytes\n",
+        printf("'%s' hat falsche Größe: erwartet %zu, ist %ld Bytes\n",
                filename, element_size, (long)st.st_size);
         return NULL;
     }
@@ -98,6 +98,8 @@ static void print_load_status(const char* filename, int duplicate_of) {
 // ---------------------------------------------------------
 // SHMEM initialisieren
 static int init_shmem(void) {
+    shm_unlink(SHM_NAME); // lösche altes Objekt
+
     int shm_fd = shm_open(SHM_NAME, O_CREAT | O_RDWR, 0666);
     if (shm_fd < 0) {
         perror("shm_open");
@@ -118,6 +120,7 @@ static int init_shmem(void) {
         return -1;
     }
 
+    memset(battery_pdo_data, 0, sizeof(BATTERY_PDO_t) * MAX_BATTERY_PACKS); // Speicher initialisieren
     close(shm_fd);
     return 0;
 }

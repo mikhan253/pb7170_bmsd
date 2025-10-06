@@ -12,7 +12,7 @@ BATTERY_PDO_t battery_pdo_data[MAX_BATTERY_PACKS];
 // Globale Arrays
 BATTERY_USERCONF_BLOB_t* battery_userconfig_blob[MAX_BATTERY_PACKS];
 BATTERY_GENERALCONF_t*   battery_generalconfig_blob[MAX_BATTERY_PACKS];
-BATTERY_CALIBRATION_t*   battery_calibration[MAX_BATTERY_PACKS];
+BATTERY_CALIBRATION_t*   battery_calibration_blob[MAX_BATTERY_PACKS];
 uint16_t battery_enabled = 0;
 
 // ---------------------------------------------------------
@@ -156,16 +156,16 @@ void load_battery_all_configs(void)
         // --- CALIBRATION
         snprintf(filename, sizeof(filename), "pack%d_calibration.bin", i);
         duplicate_of = -1;
-        battery_calibration[i] = load_binary_file(
+        battery_calibration_blob[i] = load_binary_file(
             filename,
             sizeof(BATTERY_CALIBRATION_t),
             &duplicate_of,
-            (void**)battery_calibration,
+            (void**)battery_calibration_blob,
             i,
             0,
             1
         );
-        if (!battery_calibration[i]) continue;
+        if (!battery_calibration_blob[i]) continue;
         print_load_status(filename, duplicate_of);
 
         // =========================

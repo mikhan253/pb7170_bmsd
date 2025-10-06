@@ -1,6 +1,8 @@
 #ifndef _DATAOBJECTS_H_
 #define _DATAOBJECTS_H_
 
+#define MAX_BATTERY_PACKS 10
+
 typedef enum {
     PB7170_STATE_WAIT_INIT = 0,
     PB7170_STATE_INIT,
@@ -13,6 +15,7 @@ typedef enum {
     PB7170_STATE_WAIT_DIAG2,
     PB7170_STATE_RUN,
     PB7170_STATE_ERROR,
+    PB7170_STATE_DISABLED,
     PB7170_STATE_COUNT  // Anzahl der States (letztes Element)
 } PB7170_Statemachine_t;
 
@@ -125,4 +128,38 @@ typedef struct {
     float CycleCount;
 } BATTERY_PDO_t;
 
+/**************** Konfigurationsdateien ****************/
+typedef struct __attribute__((packed)) {
+    uint8_t address;
+    uint16_t data;
+} BATTERY_USERCONF_BLOB_t;
+
+typedef struct {
+    float balancer_start_voltage;
+    float balancer_diff_voltage;
+    float current_cadc_factor;
+    float current_vadc_factor;
+    float ntc_polynom[11];
+} BATTERY_GENERALCONF_t;
+
+typedef struct {
+    float cadc_offset;
+    float vadc_offset;
+    float ntc_offset[4];
+    float cell_offset[16];
+    float pvdd_offset;
+    float cadc_gain;
+    float vadc_gain;
+    float ntc_gain[4];
+    float cell_gain[16];
+    float pvdd_gain;
+} BATTERY_CALIBRATION_t;
+
+extern BATTERY_PDO_t battery_pdo_data[MAX_BATTERY_PACKS];
+extern BATTERY_USERCONF_BLOB_t* battery_userconfig_blob[MAX_BATTERY_PACKS];
+extern BATTERY_GENERALCONF_t*   battery_generalconfig_blob[MAX_BATTERY_PACKS];
+extern BATTERY_CALIBRATION_t*   battery_calibration[MAX_BATTERY_PACKS];
+extern uint16_t battery_enabled;
+
+void load_battery_all_configs(void);
 #endif

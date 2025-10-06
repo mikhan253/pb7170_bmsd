@@ -416,45 +416,66 @@ with open(FILENAME, 'wb') as f:
     f.write(struct.pack('<BH', 0, 0))
     print()
 ###################################################
-## NTC POLYNOM                                   ##
+## GENERAL CONFIGURATION                         ##
 ###################################################
-FILENAME=f'pack{ID}_ntcpolynom.bin'
+FILENAME=f'pack{ID}_generalconf.bin'
 print(FILENAME)
 
-ntcpolynom_blob = array.array('f',configdata["Hardware Configuration"]["NTC Polynom"])
+generalconf_blob = array.array('f', [
+    #float balancer_start_voltage;
+    configdata["Battery Configuration"]["Balancer Cell Startvoltage [V]"],
+    #float balancer_diff_voltage;
+    configdata["Battery Configuration"]["Balancer Cell max Deltavoltage [V]"],
+    #float current_cadc_factor;
+    250 / (int(configdata["User Configuration"]["CADC Period [ms]"]/62.5)*8000) * 1e-3 / configdata["Hardware Configuration"]["Shunt Resistance"] ,
+    #float current_vadc_factor;
+    200e-6 / configdata["User Configuration"]["Shunt amplification fast current"] / configdata["Hardware Configuration"]["Shunt Resistance"],
+    #float ntc_polynom[11];
+    configdata["Hardware Configuration"]["NTC Polynom"][0],
+    configdata["Hardware Configuration"]["NTC Polynom"][1],
+    configdata["Hardware Configuration"]["NTC Polynom"][2],
+    configdata["Hardware Configuration"]["NTC Polynom"][3],
+    configdata["Hardware Configuration"]["NTC Polynom"][4],
+    configdata["Hardware Configuration"]["NTC Polynom"][5],
+    configdata["Hardware Configuration"]["NTC Polynom"][6],
+    configdata["Hardware Configuration"]["NTC Polynom"][7],
+    configdata["Hardware Configuration"]["NTC Polynom"][8],
+    configdata["Hardware Configuration"]["NTC Polynom"][9],
+    configdata["Hardware Configuration"]["NTC Polynom"][10]
+    ])
 
-print("->", ' '.join(f"{x:.3e}" for x in ntcpolynom_blob))
+print("->", ' '.join(f"{x:.3e}" for x in generalconf_blob))
 with open(FILENAME, 'wb') as datei:
-    ntcpolynom_blob.tofile(datei)
+    generalconf_blob.tofile(datei)
 
 ###################################################
 ## CURRENT FACTORS                               ##
 ###################################################
 
-FILENAME=f'pack{ID}_currentfactors.bin'
+FILENAME=f'pack{ID}_calibration.bin'
 print(FILENAME)
-currentfactors_blob = array.array('f', [
-    #CADC
-    250 / (int(configdata["User Configuration"]["CADC Period [ms]"]/62.5)*8000) * 1e-3 / configdata["Hardware Configuration"]["Shunt Resistance"] ,
-    #VADC Strom
-    200e-6 / configdata["User Configuration"]["Shunt amplification fast current"] / configdata["Hardware Configuration"]["Shunt Resistance"]
+calibration_blob = array.array('f', [
+    #float cadc_offset;
+    0,
+    #float vadc_offset;
+    0,
+    #float ntc_offset[4];
+    0,0,0,0,
+    #float cell_offset[16];
+    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
+    #float pvdd_offset;
+    0,0,0,0,
+    #float cadc_gain;
+    1,
+    #float vadc_gain;
+    1,
+    #float ntc_gain[4];
+    1,1,1,1,
+    #float cell_gain[16];
+    1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
+    #float pvdd_gain;
+    1
     ])
-
-print("->", ' '.join(f"{x:.3e}" for x in currentfactors_blob))
+print("->", ' '.join(f"{x:.3e}" for x in calibration_blob))
 with open(FILENAME, 'wb') as datei:
-    currentfactors_blob.tofile(datei)
-
-###################################################
-## BALANCER SETUP                                ##
-###################################################
-
-FILENAME=f'pack{ID}_balancer.bin'
-print(FILENAME)
-balancer_blob = array.array('f', [
-    configdata["Battery Configuration"]["Balancer Cell Startvoltage [V]"],
-    configdata["Battery Configuration"]["Balancer Cell max Deltavoltage [V]"],
-    ])
-
-print("->", ' '.join(f"{x:.3e}" for x in balancer_blob))
-with open(FILENAME, 'wb') as datei:
-    balancer_blob.tofile(datei)
+    calibration_blob.tofile(datei)

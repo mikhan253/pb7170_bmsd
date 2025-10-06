@@ -12,7 +12,8 @@ static uint8_t spi_rx_buf[67];          // globaler RX-Buffer
 static struct spi_ioc_transfer spi_tr;  // globaler SPI-Transfer struct
 
 // ---------------- CRC8 ----------------
-static const uint8_t pb7170_crc8_table[256] = {
+static const uint8_t pb7170_crc8_table[256] =
+{
     0x00, 0x07, 0x0E, 0x09, 0x1C, 0x1B, 0x12, 0x15, 0x38, 0x3F, 0x36, 0x31, 
     0x24, 0x23, 0x2A, 0x2D, 0x70, 0x77, 0x7E, 0x79, 0x6C, 0x6B, 0x62, 0x65, 
     0x48, 0x4F, 0x46, 0x41, 0x54, 0x53, 0x5A, 0x5D, 0xE0, 0xE7, 0xEE, 0xE9, 
@@ -36,6 +37,26 @@ static const uint8_t pb7170_crc8_table[256] = {
     0xDE, 0xD9, 0xD0, 0xD7, 0xC2, 0xC5, 0xCC, 0xCB, 0xE6, 0xE1, 0xE8, 0xEF, 
     0xFA, 0xFD, 0xF4, 0xF3
 };
+
+static inline uint8_t pb7170_crc8(const void *data, uint_fast8_t len)
+{
+    const uint8_t *p = (const uint8_t *)data;
+    uint8_t crc = 0x00;
+
+    while (len >= 4)
+    {
+        crc = pb7170_crc8_table[crc ^ *p++];
+        crc = pb7170_crc8_table[crc ^ *p++];
+        crc = pb7170_crc8_table[crc ^ *p++];
+        crc = pb7170_crc8_table[crc ^ *p++];
+        len -= 4;
+    }
+    while (len--)
+    {
+        crc = pb7170_crc8_table[crc ^ *p++];
+    }
+    return crc;
+}
 
 // ---------------- SPI Functions ----------------
 int spi_select_device(uint_fast8_t device)
@@ -75,25 +96,6 @@ error:
     close(spi_fd);
     return -1;
 }
-
-static inline uint8_t pb7170_crc8(const void *data, uint_fast8_t len)
-{
-    const uint8_t *p = (const uint8_t *)data;
-    uint8_t crc = 0x00;
-
-    while (len >= 4) {
-        crc = pb7170_crc8_table[crc ^ *p++];
-        crc = pb7170_crc8_table[crc ^ *p++];
-        crc = pb7170_crc8_table[crc ^ *p++];
-        crc = pb7170_crc8_table[crc ^ *p++];
-        len -= 4;
-    }
-    while (len--) {
-        crc = pb7170_crc8_table[crc ^ *p++];
-    }
-    return crc;
-}
-
 int pb7170_spi_read_register(uint8_t reg_addr, uint16_t* output, uint_fast8_t count) 
 {
     if (count > 32) 

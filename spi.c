@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include <stdint.h>
 #include <stddef.h>
 #include <fcntl.h>
@@ -10,6 +11,10 @@ int spi_fd = -1;                        // globales SPI-Filedescriptor
 static uint8_t spi_tx_buf[67];          // globaler TX-Buffer
 static uint8_t spi_rx_buf[67];          // globaler RX-Buffer
 static struct spi_ioc_transfer spi_tr;  // globaler SPI-Transfer struct
+
+#define NUM_ADDR_PINS 3
+static const unsigned int addr_pins[NUM_ADDR_PINS] = {56, 57, 58};
+
 
 // ---------------- CRC8 ----------------
 static const uint8_t pb7170_crc8_table[256] =
@@ -59,11 +64,49 @@ static inline uint8_t pb7170_crc8(const void *data, uint_fast8_t len)
 }
 
 // ---------------- SPI Functions ----------------
+
+// Hilfsfunktion: GPIO exportieren
+static int gpio_export(unsigned int gpio)
+{
+    FILE *f = fopen("/sys/class/gpio/export", "w");
+    if (!f) return -1;
+    fprintf(f, "%u", gpio);
+    fclose(f);
+    return 0;
+}
+
+// Hilfsfunktion: GPIO Richtung setzen
+static int gpio_set_direction(unsigned int gpio, const char *dir)
+{
+    char path[64];
+    snprintf(path, sizeof(path), "/sys/class/gpio/gpio%u/direction", gpio);
+    FILE *f = fopen(path, "w");
+    if (!f) return -1;
+    fprintf(f, "%s", dir);
+    fclose(f);
+    return 0;
+}
+
+// Hilfsfunktion: GPIO Wert setzen
+static int gpio_set_value(unsigned int gpio, int value)
+{
+    char path[64];
+    snprintf(path, sizeof(path), "/sys/class/gpio/gpio%u/value", gpio);
+    FILE *f = fopen(path, "w");
+    if (!f) return -1;
+    fprintf(f, "%d", value ? 1 : 0);
+    fclose(f);
+    return 0;
+}
+
+
 int spi_select_device(uint_fast8_t device)
 {
-    // Device-Auswahl (z.B. über GPIOs) implementieren
-    // Beispiel: GPIO-Pins setzen, um das gewünschte Gerät auszuwählen
-    return 0; // Erfolg
+    for (int i = 0; i < NUM_ADDR_PINS; i++) {
+        int val = (device >> i) & 1;
+        gpio_set_value(addr_pins[i], val);
+    }
+    return 0;
 }
 
 int spi_init(const char *device, uint32_t speed, uint8_t mode, uint8_t bits)
@@ -90,7 +133,14 @@ int spi_init(const char *device, uint32_t speed, uint8_t mode, uint8_t bits)
     // Maximalgeschwindigkeit (Hz)
     if (ioctl(spi_fd, SPI_IOC_WR_MAX_SPEED_HZ, &speed) < 0)
         goto error;
-    
+
+    for (int i = 0; i < NUM_ADDR_PINS; i++) {
+        gpio_export(addr_pins[i]);
+        usleep(1000); // kurz warten, bis sysfs angelegt
+        gpio_set_direction(addr_pins[i], "out");
+        gpio_set_value(addr_pins[i], 0); // Default 0
+    }
+
     return 0;
 error:
     close(spi_fd);

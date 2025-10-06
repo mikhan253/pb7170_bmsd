@@ -93,8 +93,7 @@ int pb7170_readdata(int pack_id) {
 }
 
 int main(void) {
-    uint32_t BatteryPackCounter = 0;
-    if (setup_task(5)) {
+    if (setup_task(125)) {
         printf("Failed to set up task\n");
         return 1;
     }
@@ -111,52 +110,60 @@ int main(void) {
         read(timer_fd, &expirations, sizeof(expirations));  // blockiert bis Timer feuert
         if (expirations == 1)
         {
-            uint16_t read_data;
+            for(uint32_t BatteryPackCounter = 0; BatteryPackCounter <= 7; BatteryPackCounter++)
+            {
+                if ((battery_enabled & (1 << BatteryPackCounter)) == 0)
+                    continue;
+                spi_select_device(BatteryPackCounter);
 
-            switch(battery_pdo_data[BatteryPackCounter].Statemachine) {
-                case PB7170_STATE_WAIT_INIT:
-                    pb7170_spi_read_register(0x00, &read_data, 1);
-                    if (read_data == 0x6000) { /* TOP_STATUS muss auf Power-up Complete sein */
-                        printf("PACK%u: PB7170 gefunden, initialisiere...\n", battery_pdo_data[BatteryPackCounter].ID);
+                uint16_t read_data;
+                //for (uint32_t BatteryPackCounter = 0; BatteryPackCounter < MAX_BATTERY_PACKS)
 
-                        /* Safe Mode */
-                        pb7170_spi_write_register(0x13, 0); // Alle MOSFETs aus
-                        pb7170_spi_write_register(0x0c, 0); // Alle Balancer aus
+                switch(battery_pdo_data[BatteryPackCounter].Statemachine) {
+                    case PB7170_STATE_WAIT_INIT:
+                        pb7170_spi_read_register(0x00, &read_data, 1);
+                        if (read_data == 0x6000) { /* TOP_STATUS muss auf Power-up Complete sein */
+                            printf("PACK%u: PB7170 gefunden, initialisiere...\n", battery_pdo_data[BatteryPackCounter].ID);
 
-                        battery_pdo_data[BatteryPackCounter].Statemachine = PB7170_STATE_INIT;
-                    }
-                    break;
-                case PB7170_STATE_INIT:
-                    pb7170_spi_write_register(0x45,0x95); // USER Unlock
-                    if (pb7170_init(BatteryPackCounter) == 0) {
-                        pb7170_spi_write_register(0x45,0x00); // USER lock
-                        pb7170_spi_write_register(0x05,0x4000); //Clear RESET Flag
-                        pb7170_spi_write_register(0x0d,31); //Setup Balancer
+                            /* Safe Mode */
+                            pb7170_spi_write_register(0x13, 0); // Alle MOSFETs aus
+                            pb7170_spi_write_register(0x0c, 0); // Alle Balancer aus
 
-                        printf("PACK%u: Userconfig erfolgreich geschrieben\n", battery_pdo_data[BatteryPackCounter].ID);
-                        battery_pdo_data[BatteryPackCounter].Statemachine = PB7170_STATE_CONFIG;
-                    } else {
-                        printf("PACK%u: Fehler beim Schreiben der Userconfig\n", battery_pdo_data[BatteryPackCounter].ID);
-                        battery_pdo_data[BatteryPackCounter].Statemachine = PB7170_STATE_ERROR;
+                            battery_pdo_data[BatteryPackCounter].Statemachine = PB7170_STATE_INIT;
+                        }
                         break;
-                    }
-                    
-                    
+                    case PB7170_STATE_INIT:
+                        pb7170_spi_write_register(0x45,0x95); // USER Unlock
+                        if (pb7170_init(BatteryPackCounter) == 0) {
+                            pb7170_spi_write_register(0x45,0x00); // USER lock
+                            pb7170_spi_write_register(0x05,0x4000); //Clear RESET Flag
+                            pb7170_spi_write_register(0x0d,31); //Setup Balancer
 
-                    break;
-                case PB7170_STATE_CONFIG:
-                    battery_pdo_data[BatteryPackCounter].Statemachine = PB7170_STATE_RUN;
-                    break;
-                case PB7170_STATE_RUN:
-                    pb7170_readdata(BatteryPackCounter);
-                    //printf("PACK%u: V=%.3fV I=%.3fA T=%.1fC SOC=%.1f%%\n", battery_pdo_data[BatteryPackCounter].ID, battery_pdo_data[BatteryPackCounter].PackVoltage, battery_pdo_data[BatteryPackCounter].Current, battery_pdo_data[BatteryPackCounter].DieTemp, battery_pdo_data[BatteryPackCounter].SOC);
-                    // Normalbetrieb
-                    break;
-                case PB7170_STATE_ERROR:
-                    // Fehlerbehandlung
-                    break;
-                default:
-                    break;
+                            printf("PACK%u: Userconfig erfolgreich geschrieben\n", battery_pdo_data[BatteryPackCounter].ID);
+                            battery_pdo_data[BatteryPackCounter].Statemachine = PB7170_STATE_CONFIG;
+                        } else {
+                            printf("PACK%u: Fehler beim Schreiben der Userconfig\n", battery_pdo_data[BatteryPackCounter].ID);
+                            battery_pdo_data[BatteryPackCounter].Statemachine = PB7170_STATE_ERROR;
+                            break;
+                        }
+                        
+                        
+
+                        break;
+                    case PB7170_STATE_CONFIG:
+                        battery_pdo_data[BatteryPackCounter].Statemachine = PB7170_STATE_RUN;
+                        break;
+                    case PB7170_STATE_RUN:
+                        pb7170_readdata(BatteryPackCounter);
+                        //printf("PACK%u: V=%.3fV I=%.3fA T=%.1fC SOC=%.1f%%\n", battery_pdo_data[BatteryPackCounter].ID, battery_pdo_data[BatteryPackCounter].PackVoltage, battery_pdo_data[BatteryPackCounter].Current, battery_pdo_data[BatteryPackCounter].DieTemp, battery_pdo_data[BatteryPackCounter].SOC);
+                        // Normalbetrieb
+                        break;
+                    case PB7170_STATE_ERROR:
+                        // Fehlerbehandlung
+                        break;
+                    default:
+                        break;
+                }
             }
         }
         else

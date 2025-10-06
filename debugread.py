@@ -2,6 +2,7 @@ import mmap
 import ctypes
 import os
 import time
+import sys
 
 # SHM Name und Konstanten
 SHM_NAME = "/battery_pdo_shm"
@@ -167,10 +168,25 @@ def print_bits(name, bitstruct, fields_per_row=4, field_width=20):
         print(f"  {field_name}: {getattr(bitstruct, field_name)}".ljust(field_width), end="")
         count += 1
         if count == fields_per_row:
-            print()  # Zeilenumbruch nach der gewünschten Anzahl Felder
+            print()
             count = 0
     if count != 0:
-        print()  # nur ein Zeilenumbruch am Ende, wenn die letzte Zeile nicht voll war
+        print()
+
+# -----------------------------
+# Prüfen des Arguments
+# -----------------------------
+if len(sys.argv) != 2:
+    print(f"Usage: {sys.argv[0]} <pack_number (0-{MAX_BATTERY_PACKS-1})>")
+    sys.exit(1)
+
+try:
+    pack_index = int(sys.argv[1])
+    if not (0 <= pack_index < MAX_BATTERY_PACKS):
+        raise ValueError
+except ValueError:
+    print(f"Pack number must be between 0 and {MAX_BATTERY_PACKS-1}")
+    sys.exit(1)
 
 # -----------------------------
 # Shared Memory öffnen readonly
@@ -180,51 +196,52 @@ shm_size = ctypes.sizeof(BATTERY_PDO) * MAX_BATTERY_PACKS
 buf = mmap.mmap(fd, shm_size, mmap.MAP_SHARED, mmap.PROT_READ)
 os.close(fd)
 
-
 while True:
     # -----------------------------
-    # pack0 auslesen
+    # pack auslesen
     # -----------------------------
-    pack0_buf = buf[:ctypes.sizeof(BATTERY_PDO)]
-    pack0 = BATTERY_PDO.from_buffer_copy(pack0_buf)
+    start = ctypes.sizeof(BATTERY_PDO) * pack_index
+    end = start + ctypes.sizeof(BATTERY_PDO)
+    pack_buf = buf[start:end]
+    pack = BATTERY_PDO.from_buffer_copy(pack_buf)
 
     # -----------------------------
-    # pack0 Variablen ausgeben
+    # pack Variablen ausgeben
     # -----------------------------
-    print(f"Pack0 ID: {pack0.ID}")
-    print(f"Statemachine: {pack0.Statemachine}")
-    print(f"AliveCounter: {pack0.AliveCounter}")
-    print(f"SPI_Retries: {pack0.SPI_Retries}")
+    print(f"Pack{pack_index} ID: {pack.ID}")
+    print(f"Statemachine: {pack.Statemachine}")
+    print(f"AliveCounter: {pack.AliveCounter}")
+    print(f"SPI_Retries: {pack.SPI_Retries}")
 
-    print_bits("SW_AlertFlags", pack0.SW_AlertFlags)
-    print(f"SW_WarningFlags: {pack0.SW_WarningFlags:032b}")
-    print_bits("HW_Status", pack0.HW_Status)
-    print_bits("HW_AlertFlags", pack0.HW_AlertFlags)
-    print_bits("HW_AlertState", pack0.HW_AlertState)
-    print(f"HW_Alert_CellUnderOvervoltage: {pack0.HW_Alert_CellUnderOvervoltage:032b}")
-    print_bits("HW_AlertAux", pack0.HW_AlertAux)
-    print(f"HW_BalanceTimer: {pack0.HW_BalanceTimer}")
-    print(f"HW_BalanceStatus: {pack0.HW_BalanceStatus:016b}")
-    print_bits("MOSFet_Status", pack0.MOSFet_Status)
+    print_bits("SW_AlertFlags", pack.SW_AlertFlags)
+    print(f"SW_WarningFlags: {pack.SW_WarningFlags:032b}")
+    print_bits("HW_Status", pack.HW_Status)
+    print_bits("HW_AlertFlags", pack.HW_AlertFlags)
+    print_bits("HW_AlertState", pack.HW_AlertState)
+    print(f"HW_Alert_CellUnderOvervoltage: {pack.HW_Alert_CellUnderOvervoltage:032b}")
+    print_bits("HW_AlertAux", pack.HW_AlertAux)
+    print(f"HW_BalanceTimer: {pack.HW_BalanceTimer}")
+    print(f"HW_BalanceStatus: {pack.HW_BalanceStatus:016b}")
+    print_bits("MOSFet_Status", pack.MOSFet_Status)
 
-    print(f"BalancerState: {pack0.BalancerState}")
-    print(f"Current: {pack0.Current:.3f}")
-    print(f"FastCurrent: {pack0.FastCurrent:.3f}")
+    print(f"BalancerState: {pack.BalancerState}")
+    print(f"Current: {pack.Current:.3f}")
+    print(f"FastCurrent: {pack.FastCurrent:.3f}")
     print(f"V_Cells: ", end="")
     for i in range(NUM_CELLS):
-        print(f"{pack0.V_Cells[i]:.3f}", end=", " if i < NUM_CELLS - 1 else "\n")
+        print(f"{pack.V_Cells[i]:.3f}", end=", " if i < NUM_CELLS - 1 else "\n")
     print(f"NTC_Temperatures: ", end="")
     for i in range(NUM_NTC):
-        print(f"{pack0.NTC_Temperatures[i]:.3f}", end=", " if i < NUM_NTC - 1 else "\n")
-    print(f"DieTemp: {pack0.DieTemp:.3f}")
-    print(f"PackVoltage: {pack0.PackVoltage:.3f}")
-    print(f"PVDDVoltage: {pack0.PVDDVoltage:.3f}")
-    print(f"AvailableChargeCurrent: {pack0.AvailableChargeCurrent:.3f}")
-    print(f"AvailableDischargeCurrent: {pack0.AvailableDischargeCurrent:.3f}")
-    print(f"Capacity: {pack0.Capacity:.3f}")
-    print(f"SOC: {pack0.SOC:.3f}")
-    print(f"SOH: {pack0.SOH:.3f}")
-    print(f"CycleCount: {pack0.CycleCount:.3f}")
+        print(f"{pack.NTC_Temperatures[i]:.3f}", end=", " if i < NUM_NTC - 1 else "\n")
+    print(f"DieTemp: {pack.DieTemp:.3f}")
+    print(f"PackVoltage: {pack.PackVoltage:.3f}")
+    print(f"PVDDVoltage: {pack.PVDDVoltage:.3f}")
+    print(f"AvailableChargeCurrent: {pack.AvailableChargeCurrent:.3f}")
+    print(f"AvailableDischargeCurrent: {pack.AvailableDischargeCurrent:.3f}")
+    print(f"Capacity: {pack.Capacity:.3f}")
+    print(f"SOC: {pack.SOC:.3f}")
+    print(f"SOH: {pack.SOH:.3f}")
+    print(f"CycleCount: {pack.CycleCount:.3f}")
     time.sleep(1)
     os.system('clear')
 

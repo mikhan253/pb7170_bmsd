@@ -6,7 +6,7 @@
 #include <sys/ioctl.h>
 
 // ---------------- Globals ----------------
-int spi_fd = -1;                 // globales SPI-Filedescriptor
+int spi_fd = -1;                        // globales SPI-Filedescriptor
 static uint8_t spi_tx_buf[67];          // globaler TX-Buffer
 static uint8_t spi_rx_buf[67];          // globaler RX-Buffer
 static struct spi_ioc_transfer spi_tr;  // globaler SPI-Transfer struct
@@ -45,7 +45,6 @@ int spi_select_device(uint_fast8_t device)
     return 0; // Erfolg
 }
 
-
 int spi_init(const char *device, uint32_t speed, uint8_t mode, uint8_t bits)
 {
     spi_tr.tx_buf = (unsigned long)spi_tx_buf;
@@ -56,28 +55,25 @@ int spi_init(const char *device, uint32_t speed, uint8_t mode, uint8_t bits)
     spi_tr.bits_per_word = bits;
 
     spi_fd = open(device, O_RDWR);
-    if (spi_fd < 0)
+    if (spi_fd < 0) 
         return -1;
 
     // Mode setzen (z. B. SPI_MODE_0)
-    if (ioctl(spi_fd, SPI_IOC_WR_MODE, &mode) < 0) {
-        close(spi_fd);
-        return -2;
-    }
+    if (ioctl(spi_fd, SPI_IOC_WR_MODE, &mode) < 0)
+        goto error;
 
     // Bits pro Wort (typisch 8)
-    if (ioctl(spi_fd, SPI_IOC_WR_BITS_PER_WORD, &bits) < 0) {
-        close(spi_fd);
-        return -3;
-    }
+    if (ioctl(spi_fd, SPI_IOC_WR_BITS_PER_WORD, &bits) < 0)
+        goto error;
 
     // Maximalgeschwindigkeit (Hz)
-    if (ioctl(spi_fd, SPI_IOC_WR_MAX_SPEED_HZ, &speed) < 0) {
-        close(spi_fd);
-        return -4;
-    }
-
+    if (ioctl(spi_fd, SPI_IOC_WR_MAX_SPEED_HZ, &speed) < 0)
+        goto error;
+    
     return 0;
+error:
+    close(spi_fd);
+    return -1;
 }
 
 static inline uint8_t pb7170_crc8(const void *data, uint_fast8_t len)

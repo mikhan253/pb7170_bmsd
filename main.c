@@ -187,7 +187,7 @@ int main(void) {
                     //if((curId==0) && (CyclicDelta(newval,altval) != 4))
                     //    printf("PACK%u: SCH_CNT=%i (d=%i) CELL0=%f CURRENT=%f\n",curId,g_PackPdoData[curId].hwStatus_bits.SCH_CNT,CyclicDelta(newval,altval),g_PackPdoData[curId].cells[0],g_PackPdoData[curId].current);
 
-                    //printf("PACK%u: V=%.3fV I=%.3fA T=%.1fC stateOfCharge=%.1f%%\n", battery_pdo_data[curId].id, battery_pdo_data[curId].voltage, battery_pdo_data[curId].current, battery_pdo_data[curId].dieTemperature, battery_pdo_data[curId].stateOfCharge);
+                    //printf("PACK%u: V=%.3fV\n", g_PackPdoData[curId].id, g_PackPdoData[curId].voltage);
                     
                     // Normalbetrieb
                     break;

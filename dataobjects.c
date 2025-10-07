@@ -121,7 +121,7 @@ static int InitShmem(void) {
     }
 
     memset(g_PackPdoData, 0, sizeof(PACK_PDO_t) * MAX_BATTERY_PACKS); // Speicher initialisieren
-    printf("Shared Memory: " SHM_NAME " (size=%u)",sizeof(PACK_PDO_t) * MAX_BATTERY_PACKS);
+    printf("Shared Memory: " SHM_NAME " (size=%u)\n",sizeof(PACK_PDO_t) * MAX_BATTERY_PACKS);
     close(shm_fd);
     return 0;
 }

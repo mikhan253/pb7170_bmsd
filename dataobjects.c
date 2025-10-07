@@ -138,7 +138,7 @@ void dob_LoadPackConfigs(void)
     printf("Lade Konfigurationsdateien...\n");
     for (int i = 0; i < MAX_BATTERY_PACKS; i++) {
         g_PackPdoData[i].id = i;
-        g_PackPdoData[i].stateMachine = PB7170_STATE_DISABLED;
+        g_PackPdoData[i].stateMachine = AFE_STATE_DISABLED;
 
         struct stat st;
         snprintf(filename, sizeof(filename), "pack%d_userconf.bin", i);
@@ -195,7 +195,7 @@ void dob_LoadPackConfigs(void)
         PrintLoadState(filename, duplicate_of);
 
         g_packEnabled |= (1 << i);
-        g_PackPdoData[i].stateMachine = PB7170_STATE_WAIT_INIT;
+        g_PackPdoData[i].stateMachine = AFE_STATE_WAIT_INIT;
     }
 
     for (int i = 0; i < MAX_BATTERY_PACKS; i++)

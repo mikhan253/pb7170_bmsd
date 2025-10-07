@@ -14,7 +14,6 @@
 
 #include "dataobjects.h"
 
-static const unsigned int s_gpioPins[3] = {24, 25, 26};
 
 
 float NtcToTemperature(float value, const float *ntcCurve, int len)
@@ -102,7 +101,9 @@ int main(void) {
         printf("Failed to set up task\n");
         return 1;
     }
-    if (spi_Init("/dev/spidev0.0", 1250000, 0, 8, "/dev/gpiochip1",s_gpioPins, 3)) {
+    
+    const unsigned int GPIO_PINS[3] = {24, 25, 26};
+    if (spi_Init("/dev/spidev0.0", 1250000, 0, 8, "/dev/gpiochip1",GPIO_PINS, 3)) {
         printf("Failed to initialize SPI\n");
         return 1;
     }
@@ -130,7 +131,7 @@ int main(void) {
 
             switch(g_PackPdoData[curId].stateMachine)
             {
-                case PB7170_STATE_WAIT_INIT:
+                case AFE_STATE_WAIT_INIT:
                     spi_AFEReadRegister(0x00, &data, 1);
                     if (data == 0x6000) { /* TOP_STATUS muss auf Power-up Complete sein */
                         printf("PACK%u: PB7170 gefunden, initialisiere...\n", g_PackPdoData[curId].id);
@@ -139,10 +140,10 @@ int main(void) {
                         spi_AFEWriteRegister(0x13, 0); // Alle MOSFETs aus
                         spi_AFEWriteRegister(0x0c, 0); // Alle Balancer aus
 
-                        g_PackPdoData[curId].stateMachine = PB7170_STATE_INIT;
+                        g_PackPdoData[curId].stateMachine = AFE_STATE_INIT;
                     }
                     break;
-                case PB7170_STATE_INIT:
+                case AFE_STATE_INIT:
                     spi_AFEWriteRegister(0x45,0x95); // USER Unlock
                     if (AFEInit(curId) == 0) {
                         spi_AFEWriteRegister(0x45,0x00); // USER lock
@@ -150,25 +151,25 @@ int main(void) {
                         spi_AFEWriteRegister(0x0d,31); //Setup Balancer
 
                         printf("PACK%u: Userconfig erfolgreich geschrieben\n", g_PackPdoData[curId].id);
-                        g_PackPdoData[curId].stateMachine = PB7170_STATE_CONFIG;
+                        g_PackPdoData[curId].stateMachine = AFE_STATE_CONFIG;
                     } else {
                         printf("PACK%u: Fehler beim Schreiben der Userconfig\n", g_PackPdoData[curId].id);
-                        g_PackPdoData[curId].stateMachine = PB7170_STATE_ERROR;
+                        g_PackPdoData[curId].stateMachine = AFE_STATE_ERROR;
                         break;
                     }
                     
                     
 
                     break;
-                case PB7170_STATE_CONFIG:
-                    g_PackPdoData[curId].stateMachine = PB7170_STATE_RUN;
+                case AFE_STATE_CONFIG:
+                    g_PackPdoData[curId].stateMachine = AFE_STATE_RUN;
                     break;
-                case PB7170_STATE_RUN:
+                case AFE_STATE_RUN:
                     AFEReadData(curId);
                     //printf("PACK%u: V=%.3fV I=%.3fA T=%.1fC stateOfCharge=%.1f%%\n", battery_pdo_data[curId].id, battery_pdo_data[curId].voltage, battery_pdo_data[curId].current, battery_pdo_data[curId].dieTemperature, battery_pdo_data[curId].stateOfCharge);
                     // Normalbetrieb
                     break;
-                case PB7170_STATE_ERROR:
+                case AFE_STATE_ERROR:
                     // Fehlerbehandlung
                     break;
                 default:

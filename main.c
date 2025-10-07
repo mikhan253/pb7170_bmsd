@@ -14,13 +14,16 @@
 
 #include "dataobjects.h"
 
-float NtcToTemperature(float value, const float *NTC_CURVE, int curve_len)
+static const unsigned int s_gpioPins[3] = {24, 25, 26};
+
+
+float NtcToTemperature(float value, const float *ntcCurve, int len)
 {
-    double result = NTC_CURVE[0];
-    for (int i = 1; i < curve_len; i++) {
-        result = result * value + NTC_CURVE[i];
+    float result = ntcCurve[0];
+    for (int i = 1; i < len; i++) {
+        result = result * value + ntcCurve[i];
     }
-    return (float)result;
+    return result;
 }
 
 int AFEInit(int id) {
@@ -28,38 +31,38 @@ int AFEInit(int id) {
 
     while (g_PackUserConfig[id][i].address > 0) {
         // Beginn eines zusammenhängenden Blocks
-        uint32_t block_start = i;
-        uint32_t block_length = 1;
+        uint32_t start = i;
+        uint32_t len = 1;
 
         // Suche, wie viele aufeinanderfolgende Register wir haben (max. 32)
-        while (g_PackUserConfig[id][block_start + block_length].address ==
-               g_PackUserConfig[id][block_start + block_length - 1].address + 1 &&
-               block_length < 32 &&
-               g_PackUserConfig[id][block_start + block_length].address > 0)
-            block_length++;
+        while (g_PackUserConfig[id][start + len].address ==
+               g_PackUserConfig[id][start + len - 1].address + 1 &&
+               len < 32 &&
+               g_PackUserConfig[id][start + len].address > 0)
+            len++;
 
         // Schreibe die Register einzeln (wie bisher)
-        for (uint32_t j = 0; j < block_length; j++) {
+        for (uint32_t j = 0; j < len; j++) {
             spi_AFEWriteRegister(
-                g_PackUserConfig[id][block_start + j].address,
-                g_PackUserConfig[id][block_start + j].data
+                g_PackUserConfig[id][start + j].address,
+                g_PackUserConfig[id][start + j].data
             );
         }
 
         // Lese den ganzen Block auf einmal
-        uint16_t readback_block[32]; // max Blockgröße
+        uint16_t readback[32]; // max Blockgröße
         spi_AFEReadRegister(
-                g_PackUserConfig[id][block_start].address,
-                readback_block,
-                block_length
+                g_PackUserConfig[id][start].address,
+                readback,
+                len
             );
 
         // Vergleiche jedes Register im Block
-        for (uint32_t j = 0; j < block_length; j++)
-            if (g_PackUserConfig[id][block_start + j].data != readback_block[j])
+        for (uint32_t j = 0; j < len; j++)
+            if (g_PackUserConfig[id][start + j].data != readback[j])
                 return -1;
 
-        i += block_length; // Nächster Block
+        i += len; // Nächster Block
     }
 
     return 0;
@@ -93,12 +96,13 @@ int AFEReadData(int id) {
     return 0;
 }
 
+
 int main(void) {
     if (tas_Init(125)) {
         printf("Failed to set up task\n");
         return 1;
     }
-    if (spi_Init("/dev/spidev0.0", 1250000, 0, 8)) {
+    if (spi_Init("/dev/spidev0.0", 1250000, 0, 8, "/dev/gpiochip1",s_gpioPins, 3)) {
         printf("Failed to initialize SPI\n");
         return 1;
     }
@@ -106,50 +110,50 @@ int main(void) {
     dob_LoadPackConfigs();
 
     while (1) {
-        uint64_t expirations;
-        read(g_timerFd, &expirations, sizeof(expirations));  // blockiert bis Timer feuert
-        if (expirations != 1)
-            printf("Timer expired %llu times\n", (unsigned long long)expirations);
+        uint64_t timerExpirations;
+        read(g_timerFd, &timerExpirations, sizeof(timerExpirations));  // blockiert bis Timer feuert
+        if (timerExpirations != 1)
+            printf("Timer expired %llu times\n", (unsigned long long)timerExpirations);
 
 #ifdef TIME_IT
         struct timespec t_start, t_end;
         clock_gettime(CLOCK_MONOTONIC, &t_start);
 #endif
-        for(uint32_t current_id = 0; current_id <= 7; current_id++)
+        for(uint32_t curId = 0; curId <= 7; curId++)
         {
-            if ((g_packEnabled & (1 << current_id)) == 0)
+            if ((g_packEnabled & (1 << curId)) == 0)
                 continue;
-            spi_SelectDevice(current_id);
+            spi_SelectDevice(curId);
 
-            uint16_t read_data;
-            //for (uint32_t current_id = 0; current_id < MAX_BATTERY_PACKS)
+            uint16_t data;
+            //for (uint32_t curId = 0; curId < MAX_BATTERY_PACKS)
 
-            switch(g_PackPdoData[current_id].stateMachine)
+            switch(g_PackPdoData[curId].stateMachine)
             {
                 case PB7170_STATE_WAIT_INIT:
-                    spi_AFEReadRegister(0x00, &read_data, 1);
-                    if (read_data == 0x6000) { /* TOP_STATUS muss auf Power-up Complete sein */
-                        printf("PACK%u: PB7170 gefunden, initialisiere...\n", g_PackPdoData[current_id].id);
+                    spi_AFEReadRegister(0x00, &data, 1);
+                    if (data == 0x6000) { /* TOP_STATUS muss auf Power-up Complete sein */
+                        printf("PACK%u: PB7170 gefunden, initialisiere...\n", g_PackPdoData[curId].id);
 
                         /* Safe Mode */
                         spi_AFEWriteRegister(0x13, 0); // Alle MOSFETs aus
                         spi_AFEWriteRegister(0x0c, 0); // Alle Balancer aus
 
-                        g_PackPdoData[current_id].stateMachine = PB7170_STATE_INIT;
+                        g_PackPdoData[curId].stateMachine = PB7170_STATE_INIT;
                     }
                     break;
                 case PB7170_STATE_INIT:
                     spi_AFEWriteRegister(0x45,0x95); // USER Unlock
-                    if (AFEInit(current_id) == 0) {
+                    if (AFEInit(curId) == 0) {
                         spi_AFEWriteRegister(0x45,0x00); // USER lock
                         spi_AFEWriteRegister(0x05,0x4000); //Clear RESET Flag
                         spi_AFEWriteRegister(0x0d,31); //Setup Balancer
 
-                        printf("PACK%u: Userconfig erfolgreich geschrieben\n", g_PackPdoData[current_id].id);
-                        g_PackPdoData[current_id].stateMachine = PB7170_STATE_CONFIG;
+                        printf("PACK%u: Userconfig erfolgreich geschrieben\n", g_PackPdoData[curId].id);
+                        g_PackPdoData[curId].stateMachine = PB7170_STATE_CONFIG;
                     } else {
-                        printf("PACK%u: Fehler beim Schreiben der Userconfig\n", g_PackPdoData[current_id].id);
-                        g_PackPdoData[current_id].stateMachine = PB7170_STATE_ERROR;
+                        printf("PACK%u: Fehler beim Schreiben der Userconfig\n", g_PackPdoData[curId].id);
+                        g_PackPdoData[curId].stateMachine = PB7170_STATE_ERROR;
                         break;
                     }
                     
@@ -157,11 +161,11 @@ int main(void) {
 
                     break;
                 case PB7170_STATE_CONFIG:
-                    g_PackPdoData[current_id].stateMachine = PB7170_STATE_RUN;
+                    g_PackPdoData[curId].stateMachine = PB7170_STATE_RUN;
                     break;
                 case PB7170_STATE_RUN:
-                    AFEReadData(current_id);
-                    //printf("PACK%u: V=%.3fV I=%.3fA T=%.1fC stateOfCharge=%.1f%%\n", battery_pdo_data[current_id].id, battery_pdo_data[current_id].voltage, battery_pdo_data[current_id].current, battery_pdo_data[current_id].dieTemperature, battery_pdo_data[current_id].stateOfCharge);
+                    AFEReadData(curId);
+                    //printf("PACK%u: V=%.3fV I=%.3fA T=%.1fC stateOfCharge=%.1f%%\n", battery_pdo_data[curId].id, battery_pdo_data[curId].voltage, battery_pdo_data[curId].current, battery_pdo_data[curId].dieTemperature, battery_pdo_data[curId].stateOfCharge);
                     // Normalbetrieb
                     break;
                 case PB7170_STATE_ERROR:

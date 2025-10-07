@@ -13,9 +13,7 @@ static uint8_t s_spiTxBuf[67];          // globaler TX-Buffer
 static uint8_t s_spiRxBuf[67];          // globaler RX-Buffer
 static struct spi_ioc_transfer s_SpiTr;  // globaler SPI-Transfer struct
 
-#define NUM_ADDR_PINS 3
-static const unsigned int s_gpioAddrPins[NUM_ADDR_PINS] = {24, 25, 26};
-static const char *const s_gpioChipPath = "/dev/gpiochip1";
+static unsigned int s_gpioNrPins;
 static struct gpiod_line_request *s_gpioRequest;
 
 // ---------------- CRC8 ----------------
@@ -66,16 +64,19 @@ static inline uint8_t AFECrc8(const void *data, uint_fast8_t len)
 }
 
 // ---------------- SPI Functions ----------------
-int spi_SelectDevice(uint_fast8_t device)
+int spi_SelectDevice(uint_fast8_t spiDevice)
 {
-    enum gpiod_line_value values[NUM_ADDR_PINS];
-    for (int i = 0; i < NUM_ADDR_PINS; i++)
-        values[i] = (device >> i) & 1;
+    enum gpiod_line_value values[s_gpioNrPins];
+    for (int i = 0; i < s_gpioNrPins; i++)
+        values[i] = (spiDevice >> i) & 1;
     
     return gpiod_line_request_set_values(s_gpioRequest, values);
 }
 
-int spi_Init(const char *device, uint32_t speed, uint8_t mode, uint8_t bits)
+//static const unsigned int s_gpioAddrPins[NUM_ADDR_PINS] = {24, 25, 26};
+//static const char *const s_gpioChipPath = "/dev/gpiochip1";
+
+int spi_Init(const char *spiDevice, uint32_t speed, uint8_t mode, uint8_t bits, const char *gpioDevice, const unsigned int *gpioPins, const unsigned int gpioNrPins)
 {
     // SPI Init
     s_SpiTr.tx_buf = (unsigned long)s_spiTxBuf;
@@ -85,7 +86,7 @@ int spi_Init(const char *device, uint32_t speed, uint8_t mode, uint8_t bits)
     s_SpiTr.speed_hz = speed;
     s_SpiTr.bits_per_word = bits;
 
-    g_spiFd = open(device, O_RDWR);
+    g_spiFd = open(spiDevice, O_RDWR);
     if (g_spiFd < 0) 
         return -1;
     if (ioctl(g_spiFd, SPI_IOC_WR_MODE, &mode) < 0)
@@ -96,8 +97,10 @@ int spi_Init(const char *device, uint32_t speed, uint8_t mode, uint8_t bits)
         goto error;
 
     // GPIO Init
+    s_gpioNrPins = gpioNrPins;
+
     struct gpiod_chip *chip;
-    chip = gpiod_chip_open(s_gpioChipPath);
+    chip = gpiod_chip_open(gpioDevice);
 	if (!chip)
 		goto error;
 
@@ -111,8 +114,8 @@ int spi_Init(const char *device, uint32_t speed, uint8_t mode, uint8_t bits)
     lconfig = gpiod_line_config_new();
 	if (!lconfig)
 		goto error_linesettings;
-    for (uint32_t i = 0; i < NUM_ADDR_PINS; i++)
-		if (gpiod_line_config_add_line_settings(lconfig, &s_gpioAddrPins[i], 1, settings))
+    for (uint32_t i = 0; i < gpioNrPins; i++)
+		if (gpiod_line_config_add_line_settings(lconfig, &gpioPins[i], 1, settings))
 			goto error_lineconfig;
 
     struct gpiod_request_config *rconfig = NULL;

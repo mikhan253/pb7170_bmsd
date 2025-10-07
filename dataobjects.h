@@ -84,13 +84,12 @@ typedef struct {
             uint32_t reserved1 : 4;  // Bits 18-21
             uint32_t TDIE_HI : 1;
             uint32_t TDIE_LO : 1;
-            uint32_t reserved2 : 1;  // Bit 24
             uint32_t PACK_UV : 1;
             uint32_t PACK_OV : 1;
-            uint32_t reserved3 : 2;  // Bits 26-27
+            uint32_t reserved2 : 2;  // Bits 26-27
             uint32_t AUX_OV : 1;
             uint32_t AUX_UV : 1;
-            uint32_t reserved4 : 1;  // Bit 30
+            uint32_t reserved3 : 1;  // Bit 30
             uint32_t MEAS_DONE : 1;
         } hwAlertFlags_bits;
     };

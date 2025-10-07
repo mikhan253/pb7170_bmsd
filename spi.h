@@ -1,11 +1,11 @@
 #ifndef SPI_H
 #define SPI_H
 
-extern int spi_fd;
+extern int g_spiFd;
 
-int spi_select_device(uint_fast8_t device);
-int spi_init(const char *device, uint32_t speed, uint8_t mode, uint8_t bits);
-int pb7170_spi_read_register(uint8_t reg_addr, uint16_t* output, uint_fast8_t count);
-int pb7170_spi_write_register(uint8_t reg_addr, uint16_t data);
+int spi_SelectDevice(uint_fast8_t device);
+int spi_Init(const char *device, uint32_t speed, uint8_t mode, uint8_t bits);
+int spi_AFEReadRegister(uint8_t addr, uint16_t* output, uint_fast8_t count);
+int spi_AFEWriteRegister(uint8_t addr, uint16_t data);
 
 #endif

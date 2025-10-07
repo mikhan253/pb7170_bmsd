@@ -16,10 +16,11 @@ OBJS := $(SRC:.c=.o)
 TARGET := bmsd
 
 # Compiler flags
-CFLAGS := -O2 -Wall
+CFLAGS := -O2 -Wall -lgpiod
+
+CFLAGS += -mcpu=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard -ffast-math -ftree-vectorize -fomit-frame-pointer
 
 CC ?= $(CROSS_COMPILE)gcc
-CFLAGS ?= -Wall -O2
 TARGET = bmsd
 
 

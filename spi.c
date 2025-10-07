@@ -5,19 +5,21 @@
 #include <unistd.h>
 #include <linux/spi/spidev.h>
 #include <sys/ioctl.h>
+#include <gpiod.h>
 
 // ---------------- Globals ----------------
-int spi_fd = -1;                        // globales SPI-Filedescriptor
-static uint8_t spi_tx_buf[67];          // globaler TX-Buffer
-static uint8_t spi_rx_buf[67];          // globaler RX-Buffer
-static struct spi_ioc_transfer spi_tr;  // globaler SPI-Transfer struct
+int g_spiFd = -1;                        // globales SPI-Filedescriptor
+static uint8_t s_spiTxBuf[67];          // globaler TX-Buffer
+static uint8_t s_spiRxBuf[67];          // globaler RX-Buffer
+static struct spi_ioc_transfer s_SpiTr;  // globaler SPI-Transfer struct
 
 #define NUM_ADDR_PINS 3
-static const unsigned int addr_pins[NUM_ADDR_PINS] = {56, 57, 58};
-
+static const unsigned int s_gpioAddrPins[NUM_ADDR_PINS] = {24, 25, 26};
+static const char *const s_gpioChipPath = "/dev/gpiochip1";
+static struct gpiod_line_request *s_gpioRequest;
 
 // ---------------- CRC8 ----------------
-static const uint8_t pb7170_crc8_table[256] =
+static const uint8_t s_afeCrc8Table[256] =
 {
     0x00, 0x07, 0x0E, 0x09, 0x1C, 0x1B, 0x12, 0x15, 0x38, 0x3F, 0x36, 0x31, 
     0x24, 0x23, 0x2A, 0x2D, 0x70, 0x77, 0x7E, 0x79, 0x6C, 0x6B, 0x62, 0x65, 
@@ -43,134 +45,124 @@ static const uint8_t pb7170_crc8_table[256] =
     0xFA, 0xFD, 0xF4, 0xF3
 };
 
-static inline uint8_t pb7170_crc8(const void *data, uint_fast8_t len)
+static inline uint8_t AFECrc8(const void *data, uint_fast8_t len)
 {
     const uint8_t *p = (const uint8_t *)data;
     uint8_t crc = 0x00;
 
     while (len >= 4)
     {
-        crc = pb7170_crc8_table[crc ^ *p++];
-        crc = pb7170_crc8_table[crc ^ *p++];
-        crc = pb7170_crc8_table[crc ^ *p++];
-        crc = pb7170_crc8_table[crc ^ *p++];
+        crc = s_afeCrc8Table[crc ^ *p++];
+        crc = s_afeCrc8Table[crc ^ *p++];
+        crc = s_afeCrc8Table[crc ^ *p++];
+        crc = s_afeCrc8Table[crc ^ *p++];
         len -= 4;
     }
     while (len--)
     {
-        crc = pb7170_crc8_table[crc ^ *p++];
+        crc = s_afeCrc8Table[crc ^ *p++];
     }
     return crc;
 }
 
 // ---------------- SPI Functions ----------------
-
-// Hilfsfunktion: GPIO exportieren
-static int gpio_export(unsigned int gpio)
+int spi_SelectDevice(uint_fast8_t device)
 {
-    FILE *f = fopen("/sys/class/gpio/export", "w");
-    if (!f) return -1;
-    fprintf(f, "%u", gpio);
-    fclose(f);
-    return 0;
+    enum gpiod_line_value values[NUM_ADDR_PINS];
+    for (int i = 0; i < NUM_ADDR_PINS; i++)
+        values[i] = (device >> i) & 1;
+    
+    return gpiod_line_request_set_values(s_gpioRequest, values);
 }
 
-// Hilfsfunktion: GPIO Richtung setzen
-static int gpio_set_direction(unsigned int gpio, const char *dir)
+int spi_Init(const char *device, uint32_t speed, uint8_t mode, uint8_t bits)
 {
-    char path[64];
-    snprintf(path, sizeof(path), "/sys/class/gpio/gpio%u/direction", gpio);
-    FILE *f = fopen(path, "w");
-    if (!f) return -1;
-    fprintf(f, "%s", dir);
-    fclose(f);
-    return 0;
-}
+    // SPI Init
+    s_SpiTr.tx_buf = (unsigned long)s_spiTxBuf;
+    s_SpiTr.rx_buf = (unsigned long)s_spiRxBuf;
+    s_SpiTr.delay_usecs = 0;
+    s_SpiTr.cs_change = 0;
+    s_SpiTr.speed_hz = speed;
+    s_SpiTr.bits_per_word = bits;
 
-// Hilfsfunktion: GPIO Wert setzen
-static int gpio_set_value(unsigned int gpio, int value)
-{
-    char path[64];
-    snprintf(path, sizeof(path), "/sys/class/gpio/gpio%u/value", gpio);
-    FILE *f = fopen(path, "w");
-    if (!f) return -1;
-    fprintf(f, "%d", value ? 1 : 0);
-    fclose(f);
-    return 0;
-}
-
-
-int spi_select_device(uint_fast8_t device)
-{
-    for (int i = 0; i < NUM_ADDR_PINS; i++) {
-        int val = (device >> i) & 1;
-        gpio_set_value(addr_pins[i], val);
-    }
-    return 0;
-}
-
-int spi_init(const char *device, uint32_t speed, uint8_t mode, uint8_t bits)
-{
-    spi_tr.tx_buf = (unsigned long)spi_tx_buf;
-    spi_tr.rx_buf = (unsigned long)spi_rx_buf;
-    spi_tr.delay_usecs = 0;
-    spi_tr.cs_change = 0;
-    spi_tr.speed_hz = speed;
-    spi_tr.bits_per_word = bits;
-
-    spi_fd = open(device, O_RDWR);
-    if (spi_fd < 0) 
+    g_spiFd = open(device, O_RDWR);
+    if (g_spiFd < 0) 
         return -1;
-
-    // Mode setzen (z. B. SPI_MODE_0)
-    if (ioctl(spi_fd, SPI_IOC_WR_MODE, &mode) < 0)
+    if (ioctl(g_spiFd, SPI_IOC_WR_MODE, &mode) < 0)
+        goto error;
+    if (ioctl(g_spiFd, SPI_IOC_WR_BITS_PER_WORD, &bits) < 0)
+        goto error;
+    if (ioctl(g_spiFd, SPI_IOC_WR_MAX_SPEED_HZ, &speed) < 0)
         goto error;
 
-    // Bits pro Wort (typisch 8)
-    if (ioctl(spi_fd, SPI_IOC_WR_BITS_PER_WORD, &bits) < 0)
-        goto error;
+    // GPIO Init
+    struct gpiod_chip *chip;
+    chip = gpiod_chip_open(s_gpioChipPath);
+	if (!chip)
+		goto error;
 
-    // Maximalgeschwindigkeit (Hz)
-    if (ioctl(spi_fd, SPI_IOC_WR_MAX_SPEED_HZ, &speed) < 0)
-        goto error;
+    struct gpiod_line_settings *settings;
+    settings = gpiod_line_settings_new();
+	if (!settings)
+		goto error_chip;
+    gpiod_line_settings_set_direction(settings, GPIOD_LINE_DIRECTION_OUTPUT);
 
-    for (int i = 0; i < NUM_ADDR_PINS; i++) {
-        gpio_export(addr_pins[i]);
-        usleep(1000); // kurz warten, bis sysfs angelegt
-        gpio_set_direction(addr_pins[i], "out");
-        gpio_set_value(addr_pins[i], 0); // Default 0
-    }
+    struct gpiod_line_config *lconfig;
+    lconfig = gpiod_line_config_new();
+	if (!lconfig)
+		goto error_linesettings;
+    for (uint32_t i = 0; i < NUM_ADDR_PINS; i++)
+		if (gpiod_line_config_add_line_settings(lconfig, &s_gpioAddrPins[i], 1, settings))
+			goto error_lineconfig;
 
+    struct gpiod_request_config *rconfig = NULL;
+    rconfig = gpiod_request_config_new();
+    if (!rconfig)
+        goto error_lineconfig;
+    gpiod_request_config_set_consumer(rconfig, "bmsd");
+
+    s_gpioRequest = gpiod_chip_request_lines(chip, rconfig, lconfig);
+    if (!s_gpioRequest)
+        goto error_lineconfig;
+    
     return 0;
+error_lineconfig:
+    gpiod_line_config_free(lconfig);
+error_linesettings:
+    gpiod_line_settings_free(settings);
+error_chip:
+	gpiod_chip_close(chip);
 error:
-    close(spi_fd);
+    close(g_spiFd);
     return -1;
 }
-int pb7170_spi_read_register(uint8_t reg_addr, uint16_t* output, uint_fast8_t count) 
+
+int spi_AFEReadRegister(uint8_t addr, uint16_t* output, uint_fast8_t count) 
 {
     if (count > 32) 
         return -1; // Maximale Anzahl überschritten
 
     size_t tx_len = 2 + count * 2 + 1; // 2 Byte Kommando + count*2 Byte Daten + 1 Byte CRC
-    spi_tr.len = tx_len;
+    s_SpiTr.len = tx_len;
 
     // Header setzen
-    spi_tx_buf[0] = (reg_addr & 0x7F) << 1;
-    spi_tx_buf[1] = ((count - 1) & 0x1F) | (reg_addr & 0x80);
+    s_spiTxBuf[0] = (addr & 0x7F) << 1;
+    s_spiTxBuf[1] = ((count - 1) & 0x1F) | (addr & 0x80);
 
     // SPI-Transfer durchführen
-    if (ioctl(spi_fd, SPI_IOC_MESSAGE(1), &spi_tr) < 0)
-        return -2; // SPI Fehler
+    if (ioctl(g_spiFd, SPI_IOC_MESSAGE(1), &s_SpiTr) < 0)
+        return -1; // SPI Fehler
 
-    // Header für CRC prüfen
-    spi_rx_buf[0] = spi_tx_buf[0];
-    spi_rx_buf[1] = spi_tx_buf[1];
-    if (pb7170_crc8(spi_rx_buf, tx_len))
+        // Header für CRC prüfen
+    s_spiRxBuf[0] = s_spiTxBuf[0];
+    s_spiRxBuf[1] = s_spiTxBuf[1];
+    if (AFECrc8(s_spiRxBuf, tx_len))
         return -3; // CRC Fehler
 
     // Pointer-basiert Daten aus RX extrahieren (big-endian)
-    const uint8_t *p = &spi_rx_buf[2];
-    for (uint_fast8_t i = 0; i < count; i++) {
+    const uint8_t *p = &s_spiRxBuf[2];
+    for (uint_fast8_t i = 0; i < count; i++)
+    {
         output[i] = ((uint16_t)p[0] << 8) | p[1];
         p += 2;
     }
@@ -178,21 +170,21 @@ int pb7170_spi_read_register(uint8_t reg_addr, uint16_t* output, uint_fast8_t co
     return 0; // Erfolg
 }
 
-int pb7170_spi_write_register(uint8_t reg_addr, uint16_t data) 
+int spi_AFEWriteRegister(uint8_t addr, uint16_t data) 
 {
-    spi_tr.len = 4;
+    s_SpiTr.len = 4;
 
     // Header setzen
-    spi_tx_buf[0] = ((reg_addr & 0x7F) << 1) | 1;
+    s_spiTxBuf[0] = ((addr & 0x7F) << 1) | 1;
     // Daten setzen
-    spi_tx_buf[1] = data >> 8;
-    spi_tx_buf[2] = data & 0xFF;
+    s_spiTxBuf[1] = data >> 8;
+    s_spiTxBuf[2] = data & 0xFF;
     // CRC setzen
-    spi_tx_buf[3] = pb7170_crc8(spi_tx_buf, 3);
+    s_spiTxBuf[3] = AFECrc8(s_spiTxBuf, 3);
 
     // SPI-Transfer durchführen
-    if (ioctl(spi_fd, SPI_IOC_MESSAGE(1), &spi_tr) < 0)
-        return -2; // SPI Fehler
+    if (ioctl(g_spiFd, SPI_IOC_MESSAGE(1), &s_SpiTr) < 0)
+        return -1; // SPI Fehler
 
     return 0; // Erfolg
 }

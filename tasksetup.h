@@ -1,8 +1,8 @@
 #ifndef TASKSETUP_H
 #define TASKSETUP_H
 
-extern int timer_fd;
+extern int g_timerFd;
 
-int setup_task(int zykluszeit_ms);
+int tas_Init(int cycletimeMs);
 
 #endif

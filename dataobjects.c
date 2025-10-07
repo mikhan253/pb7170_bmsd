@@ -9,20 +9,20 @@
 #include "dataobjects.h"
 
 // SHMEM Objekt
-BATTERY_PDO_t* battery_pdo_data = NULL;
+PACK_PDO_t* g_PackPdoData = NULL;
 
 // Globale Arrays
-BATTERY_USERCONF_BLOB_t* battery_userconfig_blob[MAX_BATTERY_PACKS];
-BATTERY_GENERALCONF_t*   battery_generalconfig_blob[MAX_BATTERY_PACKS];
-BATTERY_CALIBRATION_t*   battery_calibration_blob[MAX_BATTERY_PACKS];
-uint16_t battery_enabled = 0;
+PACK_USERCONF_t* g_PackUserConfig[MAX_BATTERY_PACKS];
+PACK_GENERALCONF_t* g_PackGeneralConfig[MAX_BATTERY_PACKS];
+PACK_CALIBRATION_t* g_PackCalibration[MAX_BATTERY_PACKS];
+uint16_t g_packEnabled = 0;
 
 // SHMEM Konfiguration
 #define SHM_NAME "/battery_pdo_shm"
 
 // ---------------------------------------------------------
 // generische Datei-Ladefunktion
-static void* load_binary_file(
+static void* LoadBinaryFile(
     const char* filename,
     size_t element_size,
     int* is_duplicate,
@@ -67,8 +67,8 @@ static void* load_binary_file(
     }
 
     if (check_terminator) {
-        BATTERY_USERCONF_BLOB_t* arr = (BATTERY_USERCONF_BLOB_t*)buf;
-        BATTERY_USERCONF_BLOB_t last = arr[num_elements - 1];
+        PACK_USERCONF_t* arr = (PACK_USERCONF_t*)buf;
+        PACK_USERCONF_t last = arr[num_elements - 1];
         if (last.address != 0 || last.data != 0) {
             free(buf);
             return NULL;
@@ -88,7 +88,7 @@ static void* load_binary_file(
 }
 
 // Helferfunktion für Statusmeldungen
-static void print_load_status(const char* filename, int duplicate_of) {
+static void PrintLoadState(const char* filename, int duplicate_of) {
     if (duplicate_of >= 0)
         printf("- %s identisch mit pack%d\n", filename, duplicate_of);
     else
@@ -97,7 +97,7 @@ static void print_load_status(const char* filename, int duplicate_of) {
 
 // ---------------------------------------------------------
 // SHMEM initialisieren
-static int init_shmem(void) {
+static int InitShmem(void) {
     shm_unlink(SHM_NAME); // lösche altes Objekt
 
     int shm_fd = shm_open(SHM_NAME, O_CREAT | O_RDWR, 0666);
@@ -106,39 +106,39 @@ static int init_shmem(void) {
         return -1;
     }
 
-    if (ftruncate(shm_fd, sizeof(BATTERY_PDO_t) * MAX_BATTERY_PACKS) != 0) {
+    if (ftruncate(shm_fd, sizeof(PACK_PDO_t) * MAX_BATTERY_PACKS) != 0) {
         perror("ftruncate");
         close(shm_fd);
         return -1;
     }
 
-    battery_pdo_data = mmap(NULL, sizeof(BATTERY_PDO_t) * MAX_BATTERY_PACKS,
+    g_PackPdoData = mmap(NULL, sizeof(PACK_PDO_t) * MAX_BATTERY_PACKS,
                             PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
-    if (battery_pdo_data == MAP_FAILED) {
+    if (g_PackPdoData == MAP_FAILED) {
         perror("mmap");
         close(shm_fd);
         return -1;
     }
 
-    memset(battery_pdo_data, 0, sizeof(BATTERY_PDO_t) * MAX_BATTERY_PACKS); // Speicher initialisieren
+    memset(g_PackPdoData, 0, sizeof(PACK_PDO_t) * MAX_BATTERY_PACKS); // Speicher initialisieren
     close(shm_fd);
     return 0;
 }
 
-void load_battery_all_configs(void)
+void dob_LoadPackConfigs(void)
 {
-    if (init_shmem() != 0) {
+    if (InitShmem() != 0) {
         printf("Fehler: SHMEM konnte nicht initialisiert werden.\n");
         return;
     }
 
     char filename[64];
-    battery_enabled = 0;
+    g_packEnabled = 0;
 
     printf("Lade Konfigurationsdateien...\n");
     for (int i = 0; i < MAX_BATTERY_PACKS; i++) {
-        battery_pdo_data[i].ID = i;
-        battery_pdo_data[i].Statemachine = PB7170_STATE_DISABLED;
+        g_PackPdoData[i].id = i;
+        g_PackPdoData[i].stateMachine = PB7170_STATE_DISABLED;
 
         struct stat st;
         snprintf(filename, sizeof(filename), "pack%d_userconf.bin", i);
@@ -154,51 +154,51 @@ void load_battery_all_configs(void)
 
         snprintf(filename, sizeof(filename), "pack%d_userconf.bin", i);
         duplicate_of = -1;
-        battery_userconfig_blob[i] = load_binary_file(
+        g_PackUserConfig[i] = LoadBinaryFile(
             filename,
-            sizeof(BATTERY_USERCONF_BLOB_t),
+            sizeof(PACK_USERCONF_t),
             &duplicate_of,
-            (void**)battery_userconfig_blob,
+            (void**)g_PackUserConfig,
             i,
             1,
             0
         );
-        if (!battery_userconfig_blob[i]) continue;
-        print_load_status(filename, duplicate_of);
+        if (!g_PackUserConfig[i]) continue;
+        PrintLoadState(filename, duplicate_of);
 
         snprintf(filename, sizeof(filename), "pack%d_generalconf.bin", i);
         duplicate_of = -1;
-        battery_generalconfig_blob[i] = load_binary_file(
+        g_PackGeneralConfig[i] = LoadBinaryFile(
             filename,
-            sizeof(BATTERY_GENERALCONF_t),
+            sizeof(PACK_GENERALCONF_t),
             &duplicate_of,
-            (void**)battery_generalconfig_blob,
+            (void**)g_PackGeneralConfig,
             i,
             0,
             1
         );
-        if (!battery_generalconfig_blob[i]) continue;
-        print_load_status(filename, duplicate_of);
+        if (!g_PackGeneralConfig[i]) continue;
+        PrintLoadState(filename, duplicate_of);
 
         snprintf(filename, sizeof(filename), "pack%d_calibration.bin", i);
         duplicate_of = -1;
-        battery_calibration_blob[i] = load_binary_file(
+        g_PackCalibration[i] = LoadBinaryFile(
             filename,
-            sizeof(BATTERY_CALIBRATION_t),
+            sizeof(PACK_CALIBRATION_t),
             &duplicate_of,
-            (void**)battery_calibration_blob,
+            (void**)g_PackCalibration,
             i,
             0,
             1
         );
-        if (!battery_calibration_blob[i]) continue;
-        print_load_status(filename, duplicate_of);
+        if (!g_PackCalibration[i]) continue;
+        PrintLoadState(filename, duplicate_of);
 
-        battery_enabled |= (1 << i);
-        battery_pdo_data[i].Statemachine = PB7170_STATE_WAIT_INIT;
+        g_packEnabled |= (1 << i);
+        g_PackPdoData[i].stateMachine = PB7170_STATE_WAIT_INIT;
     }
 
     for (int i = 0; i < MAX_BATTERY_PACKS; i++)
-        if (battery_enabled & (1 << i)) 
+        if (g_packEnabled & (1 << i)) 
             printf("Pack %d aktiviert\n", i);
 }

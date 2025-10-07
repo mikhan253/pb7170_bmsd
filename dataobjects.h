@@ -17,20 +17,20 @@ typedef enum {
     PB7170_STATE_ERROR,
     PB7170_STATE_DISABLED,
     PB7170_STATE_COUNT  // Anzahl der States (letztes Element)
-} PB7170_Statemachine_t;
+} EStateMachine_t;
 
 typedef struct {
     /***************** Allgemeine Informationen *****************/
-    uint32_t ID;
-    PB7170_Statemachine_t Statemachine;
-    uint32_t AliveCounter;
+    uint32_t id;
+    EStateMachine_t stateMachine;
+    uint32_t aliveCounter;
 
     /***************** Allgemeine Statusinformationen *****************/
-    uint32_t SPI_Retries;
+    uint32_t spiRetries;
 
     /***************** SW zeug *****************/
     union {
-        uint32_t SW_AlertFlags;
+        uint32_t swAlertFlags;
         struct {
             uint32_t CHARGE_OC : 1;
             uint32_t DISCHARGE_OC : 1;
@@ -41,12 +41,12 @@ typedef struct {
         } SW_AlertFlags_bits;
     };
     union {
-        uint32_t SW_WarningFlags;
+        uint32_t swWarningFlags;
     };
 
     /***************** HW zeug *****************/
     union {
-        uint32_t HW_Status; /* PB7170 STATUS_MISC 0x01 */
+        uint32_t hwStatus; /* PB7170 STATUS_MISC 0x01 */
         struct {
             uint32_t STA_LODD : 1;
             uint32_t reserved1 : 1;
@@ -58,10 +58,10 @@ typedef struct {
             uint32_t STA_CHGD : 1;
             uint32_t reserved2 : 1;
             uint32_t SCH_CNT : 4;
-        } HW_Status_bits;
+        } hwStatus_bits;
     };
     union {
-        uint32_t HW_AlertFlags; /* PB7170 ALRT_FLG0,1 0x02-03 */
+        uint32_t hwAlertFlags; /* PB7170 ALRT_FLG0,1 0x02-03 */
         struct {
             uint32_t CHARGE_OC : 1;
             uint32_t DISCHARGE_OC : 1;
@@ -92,10 +92,10 @@ typedef struct {
             uint32_t AUX_UV : 1;
             uint32_t reserved4 : 1;  // Bit 30
             uint32_t MEAS_DONE : 1;
-        } HW_AlertFlags_bits;
+        } hwAlertFlags_bits;
     };
     union {
-        uint32_t HW_AlertState; /* PB7170 ALRT_STAT0,1 0x05-06 */
+        uint32_t hwAlertState; /* PB7170 ALRT_STAT0,1 0x05-06 */
         struct {
             uint32_t CHARGE_OC : 1;
             uint32_t DISCHARGE_OC : 1;
@@ -119,11 +119,11 @@ typedef struct {
             uint32_t PACK_OV : 1;
             uint32_t reserved2 : 4;  // Bits 27-30
             uint32_t CLOCK_ABNORMAL : 1;
-        } HW_AlertState_bits;
+        } hwAlertState_bits;
     };
-    uint32_t HW_Alert_CellUnderOvervoltage; /* PB7170 ALRT_OVCELL 0x07 ALRT_UVCELL 0x08 */
+    uint32_t hwAlertCellUnderOvervoltage; /* PB7170 ALRT_OVCELL 0x07 ALRT_UVCELL 0x08 */
     union {
-        uint32_t HW_AlertAux; /* PB7170 ALRT_AUX 0x0A */
+        uint32_t hwAlertAux; /* PB7170 ALRT_AUX 0x0A */
         struct {
             uint32_t AUXIN1_OV : 1;
             uint32_t AUXIN2_OV : 1;
@@ -134,71 +134,71 @@ typedef struct {
             uint32_t AUXIN2_UV : 1;
             uint32_t AUXIN3_UV : 1;
             uint32_t AUXIN4_UV : 1;
-        } HW_AlertAux_bits;
+        } hwAlertAux_bits;
     };
-    uint32_t HW_BalanceTimer; /* PB7170 BLSW_CMD 0x0F */
-    uint32_t HW_BalanceStatus; /* PB7170 BLSW_STAT 0x10 */
+    uint32_t hwBalancerTimer; /* PB7170 BLSW_CMD 0x0F */
+    uint32_t hwBalancerStatus; /* PB7170 BLSW_STAT 0x10 */
     /***************** Batteriemanagementstatus *****************/
     union {
-        uint32_t MOSFet_Status;
+        uint32_t mosfetStatus;
         struct {
             uint32_t PRECHARGE : 1;
             uint32_t CHARGE : 1;
             uint32_t DISCHARGE : 1;
-        } MOSFet_Status_bits;
+        } mosfetStatus_bits;
     };
 
-    uint32_t BalancerState;
+    uint32_t balancerState;
 
-    float Current;
-    float FastCurrent;
-    float V_Cells[16];
-    float NTC_Temperatures[4];
-    float DieTemp;
-    float PackVoltage;
-    float PVDDVoltage;
-    float AvailableChargeCurrent;
-    float AvailableDischargeCurrent;
+    float current;
+    float fastCurrent;
+    float cells[16];
+    float ntcTemperature[4];
+    float dieTemperature;
+    float voltage;
+    float pvddVoltage;
+    float availableChargeCurrent;
+    float availableDischargeCurrent;
 
-    float Capacity;
-    float SOC;
-    float SOH;
-    float CycleCount;
-} BATTERY_PDO_t;
+    float capacity;
+    float stateOfCharge;
+    float stateOfHealth;
+    float cycleCount;
+} PACK_PDO_t;
 
 /**************** Konfigurationsdateien ****************/
 typedef struct __attribute__((packed)) {
     uint8_t address;
     uint16_t data;
-} BATTERY_USERCONF_BLOB_t;
+} PACK_USERCONF_t;
 
 typedef struct {
-    float balancer_start_voltage;
-    float balancer_diff_voltage;
-    float current_cadc_factor;
-    float current_vadc_factor;
-    float ntc_polynom[11];
-} BATTERY_GENERALCONF_t;
+    float balancerStartVoltage;
+    float balancerDiffVoltage;
+    float cadcCurrentFactor;
+    float vadcCurrentFactor;
+    float ntcPolynom[11];
+} PACK_GENERALCONF_t;
 
 typedef struct {
-    float cadc_offset;
-    float vadc_offset;
-    float ntc_offset[4];
-    float cell_offset[16];
-    float pvdd_offset;
-    float cadc_gain;
-    float vadc_gain;
-    float ntc_gain[4];
-    float cell_gain[16];
-    float pvdd_gain;
-} BATTERY_CALIBRATION_t;
+    float cadcOffset;
+    float vadcOffset;
+    float ntcOffset[4];
+    float cellOffset[16];
+    float pvddOffset;
+    float cadcGain;
+    float vadcGain;
+    float ntcGain[4];
+    float cellGain[16];
+    float pvddGain;
+} PACK_CALIBRATION_t;
 
-extern BATTERY_PDO_t* battery_pdo_data;
-extern BATTERY_USERCONF_BLOB_t* battery_userconfig_blob[MAX_BATTERY_PACKS];
-extern BATTERY_GENERALCONF_t*   battery_generalconfig_blob[MAX_BATTERY_PACKS];
-extern BATTERY_CALIBRATION_t*   battery_calibration_blob[MAX_BATTERY_PACKS];
-extern uint16_t battery_enabled;
+extern PACK_PDO_t* g_PackPdoData;
+extern PACK_USERCONF_t* g_PackUserConfig[MAX_BATTERY_PACKS];
+extern PACK_GENERALCONF_t* g_PackGeneralConfig[MAX_BATTERY_PACKS];
+extern PACK_CALIBRATION_t* g_PackCalibration[MAX_BATTERY_PACKS];
+extern uint16_t g_packEnabled;
 
-void load_battery_all_configs(void);
+void dob_LoadPackConfigs(void);
 
 #endif

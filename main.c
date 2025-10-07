@@ -14,7 +14,7 @@
 
 #include "dataobjects.h"
 
-float ntc_to_temperature(float value, const float *NTC_CURVE, int curve_len)
+float NtcToTemperature(float value, const float *NTC_CURVE, int curve_len)
 {
     double result = NTC_CURVE[0];
     for (int i = 1; i < curve_len; i++) {
@@ -23,7 +23,7 @@ float ntc_to_temperature(float value, const float *NTC_CURVE, int curve_len)
     return (float)result;
 }
 
-int pb7170_init(int id) {
+int AFEInit(int id) {
     uint32_t i = 0;
 
     while (g_PackUserConfig[id][i].address > 0) {
@@ -65,7 +65,7 @@ int pb7170_init(int id) {
     return 0;
 }
 
-int pb7170_read_data(int id) {
+int AFEReadData(int id) {
     uint16_t data[28];
 
     spi_AFEReadRegister(0x01, data, 16);
@@ -84,7 +84,7 @@ int pb7170_read_data(int id) {
     for(int i=0; i < 16; i++)
         g_PackPdoData[id].cells[i] = (float)data[3 + i] * 100e-6;
     for(int i=0; i < 4; i++)
-        g_PackPdoData[id].ntcTemperature[i] = ntc_to_temperature((float)data[20 + i], g_PackGeneralConfig[id]->ntcPolynom, 11);
+        g_PackPdoData[id].ntcTemperature[i] = NtcToTemperature((float)data[20 + i], g_PackGeneralConfig[id]->ntcPolynom, 11);
     g_PackPdoData[id].dieTemperature = (float)(25437 - data[26]) / 59.17 - 64.5;
     g_PackPdoData[id].fastCurrent = (float)(data[27] & 0x7fff) * g_PackGeneralConfig[id]->vadcCurrentFactor;
     if (data[27] & 0x8000)
@@ -140,7 +140,7 @@ int main(void) {
                     break;
                 case PB7170_STATE_INIT:
                     spi_AFEWriteRegister(0x45,0x95); // USER Unlock
-                    if (pb7170_init(current_id) == 0) {
+                    if (AFEInit(current_id) == 0) {
                         spi_AFEWriteRegister(0x45,0x00); // USER lock
                         spi_AFEWriteRegister(0x05,0x4000); //Clear RESET Flag
                         spi_AFEWriteRegister(0x0d,31); //Setup Balancer
@@ -160,7 +160,7 @@ int main(void) {
                     g_PackPdoData[current_id].stateMachine = PB7170_STATE_RUN;
                     break;
                 case PB7170_STATE_RUN:
-                    pb7170_read_data(current_id);
+                    AFEReadData(current_id);
                     //printf("PACK%u: V=%.3fV I=%.3fA T=%.1fC stateOfCharge=%.1f%%\n", battery_pdo_data[current_id].id, battery_pdo_data[current_id].voltage, battery_pdo_data[current_id].current, battery_pdo_data[current_id].dieTemperature, battery_pdo_data[current_id].stateOfCharge);
                     // Normalbetrieb
                     break;

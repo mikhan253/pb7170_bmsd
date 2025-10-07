@@ -148,8 +148,6 @@ typedef struct {
         } mosfetStatus_bits;
     };
 
-    uint32_t balancerState;
-
     float current;
     float fastCurrent;
     float cells[16];
@@ -160,7 +158,8 @@ typedef struct {
     float availableChargeCurrent;
     float availableDischargeCurrent;
 
-    float capacity;
+    float availableCapacity;
+    float totalCapacity;
     float stateOfCharge;
     float stateOfHealth;
     float cycleCount;

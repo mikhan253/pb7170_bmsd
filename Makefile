@@ -37,6 +37,6 @@ clean:
 	rm -f $(OBJS) $(TARGET)
 
 push:
-	ssh $(PUSH_MACHINE) "cat > /tmp/$(TARGET)" < $(TARGET)
+	tar czf - bmsd conf webserver | ssh $(PUSH_MACHINE) "tar xzf - -C /tmp"
 
 .PHONY: all clean

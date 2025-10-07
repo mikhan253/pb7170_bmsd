@@ -141,18 +141,18 @@ void dob_LoadPackConfigs(void)
         g_PackPdoData[i].stateMachine = AFE_STATE_DISABLED;
 
         struct stat st;
-        snprintf(filename, sizeof(filename), "pack%d_userconf.bin", i);
+        snprintf(filename, sizeof(filename), "conf/pack%d_userconf.bin", i);
         if (stat(filename, &st) != 0) continue;
 
-        snprintf(filename, sizeof(filename), "pack%d_generalconf.bin", i);
+        snprintf(filename, sizeof(filename), "conf/pack%d_generalconf.bin", i);
         if (stat(filename, &st) != 0) continue;
 
-        snprintf(filename, sizeof(filename), "pack%d_calibration.bin", i);
+        snprintf(filename, sizeof(filename), "conf/pack%d_calibration.bin", i);
         if (stat(filename, &st) != 0) continue;
 
         int duplicate_of;
 
-        snprintf(filename, sizeof(filename), "pack%d_userconf.bin", i);
+        snprintf(filename, sizeof(filename), "conf/pack%d_userconf.bin", i);
         duplicate_of = -1;
         g_PackUserConfig[i] = LoadBinaryFile(
             filename,
@@ -166,7 +166,7 @@ void dob_LoadPackConfigs(void)
         if (!g_PackUserConfig[i]) continue;
         PrintLoadState(filename, duplicate_of);
 
-        snprintf(filename, sizeof(filename), "pack%d_generalconf.bin", i);
+        snprintf(filename, sizeof(filename), "conf/pack%d_generalconf.bin", i);
         duplicate_of = -1;
         g_PackGeneralConfig[i] = LoadBinaryFile(
             filename,
@@ -180,7 +180,7 @@ void dob_LoadPackConfigs(void)
         if (!g_PackGeneralConfig[i]) continue;
         PrintLoadState(filename, duplicate_of);
 
-        snprintf(filename, sizeof(filename), "pack%d_calibration.bin", i);
+        snprintf(filename, sizeof(filename), "conf/pack%d_calibration.bin", i);
         duplicate_of = -1;
         g_PackCalibration[i] = LoadBinaryFile(
             filename,

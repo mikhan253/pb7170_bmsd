@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BMS Dashboard</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body {
+      background-color: #f8f9fa;
+      font-family: 'Inter', sans-serif;
+    }
+    .pack-card {
+      border-radius: 1rem;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+      margin-bottom: 1.5rem;
+    }
+    .pack-header {
+      font-weight: 600;
+      font-size: 1.2rem;
+    }
+    .bit-active {
+      background-color: #dc3545 !important;
+      color: white !important;
+    }
+    .bit-warning {
+      background-color: #ffc107 !important;
+      color: black !important;
+    }
+    .cell-field, .ntc-field {
+      flex: 0 0 auto;
+      padding: 4px 6px;
+      margin: 1px;
+      border-radius: 4px;
+      text-align: center;
+      min-width: 50px;
+      cursor: default;
+    }
+  </style>
+</head>
+<body class="p-3">
+
+  <div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h2>Batteriemanagementsystem</h2>
+      <div>
+        <button class="btn btn-success me-2" onclick="sendCommand('all_on')">Alles Ein</button>
+        <button class="btn btn-danger me-2" onclick="sendCommand('all_off')">Alles Aus</button>
+        <button class="btn btn-warning" onclick="sendCommand('clear_errors')">Alle Fehler quittieren</button>
+      </div>
+    </div>
+
+    <div id="packsContainer" class="row gy-3">
+      <!-- Batteriepacks werden hier dynamisch eingefügt -->
+    </div>
+  </div>
+
+  <script>
+    const ERROR_TEXTS = [
+      "Chip Übertemperatur", "Chip Untertemperatur", "Zellfehler 1", "Zellfehler 2", 
+      "Kommunikationsfehler", "Spannungsabweichung", "Überstrom", "Isolationsfehler"
+    ];
+    const MOS_BITS = ["Laden", "Entladen", "Vorladen"];
+
+    async function fetchData() {
+      try {
+        const res = await fetch("/api/bmsdata");
+        const data = await res.json();
+        renderPacks(data);
+      } catch (err) {
+        console.error("API Fehler:", err);
+      }
+    }
+
+    function renderPacks(data) {
+      const container = document.getElementById("packsContainer");
+      container.innerHTML = "";
+
+      Object.entries(data).forEach(([name, pack]) => {
+        const alertBits = decodeBits(pack.Alrt, ERROR_TEXTS, 'bit-active');
+        const warnBits = decodeBits(pack.Warn, ERROR_TEXTS, 'bit-warning');
+        const mosStatus = decodeMOS(pack.MOS);
+
+        const cellOV = decode16Bits(pack.CellOV);
+        const cellUV = decode16Bits(pack.CellUV);
+        const cellBal = decode16Bits(pack.CellBal);
+
+        // Headerfarbe je nach Alarm/Warnung
+        let headerClass = "bg-primary text-white";
+        if (pack.Alrt !== 0) headerClass = "bg-danger text-white";
+        else if (pack.Warn !== 0) headerClass = "bg-warning text-dark";
+
+        // Zellbereich vorbereiten
+        const maxCellIndex = pack.Cell.indexOf(Math.max(...pack.Cell));
+        const minCellIndex = pack.Cell.indexOf(Math.min(...pack.Cell));
+        const maxCell = maxCellIndex + 1;
+        const minCell = minCellIndex + 1;
+        const diffCell = Math.max(...pack.Cell) - Math.min(...pack.Cell);
+
+        const cellsHTML = `
+          <div><strong>Zellen:</strong> (Max Zelle: ${maxCell}, Min Zelle: ${minCell}, Diff: ${diffCell.toFixed(3)} V)</div>
+          <div style="display:flex; flex-wrap:wrap; margin-top:5px;">
+            ${pack.Cell.map((v, i, arr) => {
+              let bgColor = "#d3d3d3"; // default grau
+              if (i === maxCellIndex) bgColor = "#ff4d4d";   // rot = höchste
+              else if (i === minCellIndex) bgColor = "#4d79ff"; // blau = niedrigste
+              const fontStyle = cellBal[i] ? "font-weight:bold; color: #b58900;" : "";
+              return `<div class="cell-field" title="Zelle ${i+1}" style="background-color:${bgColor}; ${fontStyle}">${v.toFixed(3)} V</div>`;
+            }).join("")}
+          </div>
+        `;
+
+        // NTC-Temperaturen
+        const ntcMaxIndex = pack.NTC.indexOf(Math.max(...pack.NTC));
+        const ntcMinIndex = pack.NTC.indexOf(Math.min(...pack.NTC));
+
+        const ntcHTML = `
+          <div style="margin-top:5px;"><strong>NTC:</strong></div>
+          <div style="display:flex; flex-wrap:wrap;">
+            ${pack.NTC.map((t, i) => {
+              let bg = "#d3d3d3";
+              if (i === ntcMaxIndex) bg = "#ff4d4d";
+              else if (i === ntcMinIndex) bg = "#4d79ff";
+              return `<div class="ntc-field" title="NTC ${i+1}" style="background-color:${bg}">${t.toFixed(1)} °C</div>`;
+            }).join("")}
+          </div>
+        `;
+
+        const packHTML = `
+          <div class="col-lg-6 col-12">
+            <div class="card pack-card">
+              <div class="card-header ${headerClass} d-flex justify-content-between align-items-center">
+                <span class="pack-header">${name}</span>
+                <small>SOC: ${pack.SOC.toFixed(1)}% | SOH: ${pack.SOH.toFixed(1)}%</small>
+              </div>
+              <div class="card-body">
+                <div><strong>Spannung:</strong> ${pack.Volt.toFixed(3)} V</div>
+                <div><strong>Strom:</strong> ${pack.Curr.toFixed(3)} A</div>
+                <div><strong>Zyklen:</strong> ${pack.Cyc.toFixed(0)}</div>
+                <hr>
+                <div><strong>Alarme:</strong> ${alertBits}</div>
+                <div><strong>Warnungen:</strong> ${warnBits}</div>
+                <hr>
+                <div><strong>MOS Status:</strong> ${mosStatus}
+                  <button class="btn btn-sm btn-outline-success ms-2" onclick="sendCommand('charge_on', '${name}')">Laden EIN</button>
+                  <button class="btn btn-sm btn-outline-danger" onclick="sendCommand('charge_off', '${name}')">Laden AUS</button>
+                  <button class="btn btn-sm btn-outline-success ms-2" onclick="sendCommand('discharge_on', '${name}')">Entladen EIN</button>
+                  <button class="btn btn-sm btn-outline-danger" onclick="sendCommand('discharge_off', '${name}')">Entladen AUS</button>
+                </div>
+                <hr>
+                ${cellsHTML}
+                <hr>
+                ${ntcHTML}
+                <div style="margin-top:5px;"><strong>Die:</strong> ${pack.Die.toFixed(3)}°C | <strong>PVDD:</strong> ${pack.PVDD.toFixed(3)} V</div>
+              </div>
+            </div>
+          </div>
+        `;
+
+        container.innerHTML += packHTML;
+      });
+    }
+
+    function decodeBits(value, texts, cssClass) {
+      let bits = [];
+      for (let i = 0; i < texts.length; i++) {
+        if (value & (1 << i)) bits.push(`<span class="badge ${cssClass} me-1">${texts[i]}</span>`);
+      }
+      return bits.length ? bits.join(" ") : "<span class='text-muted'>Keine</span>";
+    }
+
+    function decodeMOS(value) {
+      return MOS_BITS.map((t, i) => {
+        const active = (value & (1 << i)) ? "text-success fw-bold" : "text-muted";
+        return `<span class="${active}">${t}</span>`;
+      }).join(", ");
+    }
+
+    function decode16Bits(value) {
+      const arr = [];
+      for (let i = 0; i < 16; i++) arr.push(!!(value & (1 << i)));
+      return arr;
+    }
+
+    function sendCommand(cmd, pack = null) {
+      console.log("Sende Befehl:", cmd, pack);
+      fetch("/api/cmd", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cmd, pack })
+      }).catch(err => console.error("Command Error:", err));
+    }
+
+    setInterval(fetchData, 1000);
+    fetchData();
+  </script>
+</body>
+</html>

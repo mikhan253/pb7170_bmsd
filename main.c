@@ -14,7 +14,22 @@
 
 #include "dataobjects.h"
 
-
+/*int CyclicDelta(int actualVal, int previousVal) {
+    const int BEREICH = 16;
+    int delta = (actualVal - previousVal) % BEREICH;
+    
+    // Korrektur für negative Modulo-Ergebnisse
+    if (delta < 0) {
+        delta += BEREICH;
+    }
+    
+    // Finde den kürzesten Weg
+    if (delta > BEREICH / 2) {
+        delta -= BEREICH;
+    }
+    
+    return delta;
+}*/
 
 float NtcToTemperature(float value, const float *ntcCurve, int len)
 {
@@ -97,7 +112,7 @@ int AFEReadData(int id) {
 
 
 int main(void) {
-    if (tas_Init(125)) {
+    if (tas_Init(255)) { //etwas größer als 250ms, um immer einen neuen wert zu bekommen
         printf("Failed to set up task\n");
         return 1;
     }
@@ -165,8 +180,14 @@ int main(void) {
                     g_PackPdoData[curId].stateMachine = AFE_STATE_RUN;
                     break;
                 case AFE_STATE_RUN:
+                    //int altval = g_PackPdoData[curId].hwStatus_bits.SCH_CNT;
                     AFEReadData(curId);
+                    //int newval = g_PackPdoData[curId].hwStatus_bits.SCH_CNT;
+                    //if((curId==0) && (CyclicDelta(newval,altval) != 4))
+                    //    printf("PACK%u: SCH_CNT=%i (d=%i) CELL0=%f CURRENT=%f\n",curId,g_PackPdoData[curId].hwStatus_bits.SCH_CNT,CyclicDelta(newval,altval),g_PackPdoData[curId].cells[0],g_PackPdoData[curId].current);
+
                     //printf("PACK%u: V=%.3fV I=%.3fA T=%.1fC stateOfCharge=%.1f%%\n", battery_pdo_data[curId].id, battery_pdo_data[curId].voltage, battery_pdo_data[curId].current, battery_pdo_data[curId].dieTemperature, battery_pdo_data[curId].stateOfCharge);
+                    
                     // Normalbetrieb
                     break;
                 case AFE_STATE_ERROR:

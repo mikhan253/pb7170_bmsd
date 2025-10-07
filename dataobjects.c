@@ -138,7 +138,6 @@ void dob_LoadPackConfigs(void)
 
     printf("Lade Konfigurationsdateien...\n");
     for (int i = 0; i < MAX_BATTERY_PACKS; i++) {
-        g_PackPdoData[i].id = i;
         g_PackPdoData[i].stateMachine = AFE_STATE_DISABLED;
 
         struct stat st;
@@ -194,7 +193,7 @@ void dob_LoadPackConfigs(void)
         );
         if (!g_PackCalibration[i]) continue;
         PrintLoadState(filename, duplicate_of);
-
+        g_PackPdoData[i].id = i + 1;
         g_packEnabled |= (1 << i);
         g_PackPdoData[i].stateMachine = AFE_STATE_WAIT_INIT;
     }

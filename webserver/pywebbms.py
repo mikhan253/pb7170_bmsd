@@ -4,7 +4,7 @@
 import os
 import random
 import cbor2
-
+import ctypes
 import mmap
 import os
 import struct
@@ -21,14 +21,63 @@ os.environ["PYTHONHASHSEED"] = "0"      # Deterministische Hashes
 # ====================================================
 # Shmem öffnen
 # ====================================================
+class PACK_PDO_t(ctypes.Structure):
+    _pack_ = 0
+    _fields_ = [
+        ("id", ctypes.c_uint32),
+        ("stateMachine", ctypes.c_uint32),
+        ("aliveCounter", ctypes.c_uint32),
+        ("spiRetries", ctypes.c_uint32),
+        ("swAlertFlags", ctypes.c_uint32),
+        ("swWarningFlags", ctypes.c_uint32),
+        ("hwStatus", ctypes.c_uint32),
+        ("hwAlertFlags", ctypes.c_uint32),
+        ("hwAlertState", ctypes.c_uint32),
+        ("hwAlertCellUnderOvervoltage", ctypes.c_uint32),
+        ("hwAlertAux", ctypes.c_uint32),
+        ("hwBalancerTimer", ctypes.c_uint32),
+        ("hwBalancerStatus", ctypes.c_uint32),
+        ("mosfetStatus", ctypes.c_uint32),
+        ("current", ctypes.c_float),
+        ("fastCurrent", ctypes.c_float),
+        ("cells", ctypes.c_float * 16),
+        ("ntcTemperature", ctypes.c_float * 4),
+        ("dieTemperature", ctypes.c_float),
+        ("voltage", ctypes.c_float),
+        ("pvddVoltage", ctypes.c_float),
+        ("availableChargeCurrent", ctypes.c_float),
+        ("availableDischargeCurrent", ctypes.c_float),
+        ("availableCapacity", ctypes.c_float),
+        ("totalCapacity", ctypes.c_float),
+        ("stateOfCharge", ctypes.c_float),
+        ("stateOfHealth", ctypes.c_float),
+        ("cycleCount", ctypes.c_float),
+    ]
+    
+print(ctypes.sizeof(PACK_PDO_t) * 10)
+shm_name = "/dev/shm/battery_pdo_shm"
+if not os.path.exists(shm_name):
+    raise FileNotFoundError(f"Shared memory '{shm_name}' not found.")
+#if os.path.getsize(shm_name) != (ctypes.sizeof(PACK_PDO_t) * 10):
+#    raise ValueError(f"Shared memory size mismatch!")
+def print_pack(pack):
+    for name, _ in pack._fields_:
+        value = getattr(pack, name)
+        # Arrays etwas schöner ausgeben
+        if isinstance(value, ctypes.Array):
+            value = list(value)
+        print(f"{name}: {value}")
 
-SHM_NAME="/battery_pdo_shm"
-SHM_SIZE=1880
-# Shared Memory öffnen
-fd = os.open("/dev/shm" + SHM_NAME, os.O_RDONLY)
+_shm_file = open(shm_name, "rb")  # Readonly!
+_shm_map = mmap.mmap(_shm_file.fileno(), ctypes.sizeof(PACK_PDO_t) * 10, access=mmap.ACCESS_READ)
 
-# Memory Mapping erstellen
-buf = mmap.mmap(fd, SHM_SIZE, mmap.MAP_SHARED, mmap.PROT_READ)
+offset = 0 * ctypes.sizeof(PACK_PDO_t)
+raw = _shm_map[offset : offset + ctypes.sizeof(PACK_PDO_t)]
+print_pack(PACK_PDO_t.from_buffer_copy(raw))
+
+
+quit()
+
 
 # ====================================================
 # Bottle App

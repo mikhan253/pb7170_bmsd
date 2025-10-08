@@ -145,7 +145,7 @@ int spi_AFEReadRegister(uint8_t addr, uint16_t* output, uint_fast8_t count)
     if (count > 32) 
         return -1; // Maximale Anzahl überschritten
 
-    size_t tx_len = 2 + count * 2 + 1; // 2 Byte Kommando + count*2 Byte Daten + 1 Byte CRC
+    size_t tx_len = 2 + (size_t)count * 2 + 1; // 2 Byte Kommando + count*2 Byte Daten + 1 Byte CRC
     s_SpiTr.len = tx_len;
 
     // Header setzen

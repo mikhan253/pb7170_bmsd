@@ -1,266 +1,337 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>BMS Dashboard</title>
-
-<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/gh/paroga/cbor-js/cbor.js"></script>
-
-<style>
-body {
-  background-color: #f8f9fa;
-  font-family: 'Inter', sans-serif;
-}
-.pack-card {
-  border-radius: 1rem;
-  box-shadow: 0 0 10px rgba(0,0,0,0.1);
-  margin-bottom: 1.5rem;
-}
-.pack-header {
-  font-weight: 600;
-  font-size: 1.2rem;
-}
-.bit-active {
-  background-color: #28a745 !important;
-  color: white !important;
-}
-.bit-warning {
-  background-color: #ffc107 !important;
-  color: black !important;
-}
-.cell-field, .ntc-field {
-  flex: 0 0 auto;
-  padding: 4px 6px;
-  margin: 1px;
-  border-radius: 4px;
-  text-align: center;
-  min-width: 80px;
-  cursor: default;
-}
-</style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>BMS Dashboard</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/gh/paroga/cbor-js/cbor.js"></script>
+  <style>
+    body { background-color:#f8f9fa; font-family:Inter, sans-serif; }
+    .pack-card { border-radius:1rem; box-shadow:0 0 10px rgba(0,0,0,0.1); margin-bottom:1.5rem; }
+    .pack-header { font-weight:600; font-size:1.2rem; }
+    .cell-field, .ntc-field {
+      flex: 0 0 auto; padding:4px 6px; margin:1px; border-radius:4px;
+      text-align:center; min-width:70px; cursor:default; background:#d3d3d3;
+    }
+    .badge-mos-on { color:#ffffff; background:#28a745; padding:.35rem .5rem; border-radius:.5rem; }
+    .badge-mos-part { color:#212529; background:#ffc107; padding:.35rem .5rem; border-radius:.5rem; }
+    .badge-mos-off { color:#6c757d; padding:.35rem .5rem; border-radius:.5rem; background:transparent; border:1px solid rgba(0,0,0,0.04); }
+  </style>
 </head>
 <body class="p-3">
+  <div class="container-fluid">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h2>Batteriemanagementsystem</h2>
+      <div>
+        <button class="btn btn-success me-2" onclick="sendCommand('all_on')">Alles Ein</button>
+        <button class="btn btn-danger me-2" onclick="sendCommand('all_off')">Alles Aus</button>
+        <button class="btn btn-warning" onclick="sendCommand('clear_errors')">Alle Fehler quittieren</button>
+      </div>
+    </div>
 
-<div class="container-fluid">
-  <div class="d-flex justify-content-between align-items-center mb-3">
-    <h2>Batteriemanagementsystem</h2>
+    <div id="packsContainer" class="row gy-3"></div>
   </div>
 
-  <div id="packsContainer" class="row gy-3">
-    <!-- Global Status + Packs -->
-  </div>
-</div>
+  <script>
+  // ---------- Config / Texts ----------
+  const ERROR_TEXTS = [
+    "Überstrom Laden","Überstrom Entladen","Kurzschluss","Chipstatus",
+    "Übertemperatur","Untertemperatur","Kommunikation","Diagnose",
+    "Überspannung Pack", "Unterspannung Pack", "Zellen Überspannung", "Zellen Unterspannung",
+    "Zellen Differenzspannung"
+  ];
+  const MOS_BITS = ["Laden","Entladen","Vorladen"];
 
-<script type="module">
-const ERROR_TEXTS = [
-  "Chip Übertemperatur", "Chip Untertemperatur", "Zellfehler 1", "Zellfehler 2",
-  "Kommunikationsfehler", "Spannungsabweichung", "Überstrom", "Isolationsfehler"
-];
-const MOS_BITS = ["Laden", "Entladen", "Vorladen"];
-const packsContainer = document.getElementById("packsContainer");
+  // ---------- Helpers ----------
+  function safeArr(v){ return Array.isArray(v)?v:[]; }
+  function avg(arr){ return arr && arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : 0; }
+  function sum(arr){ return arr && arr.length ? arr.reduce((a,b)=>a+b,0) : 0; }
 
-async function fetchData() {
-  try {
-    const res = await fetch("/api/bmsdata", { cache: "no-store" });
-    const buffer = await res.arrayBuffer();
-    const data = CBOR.decode(buffer);
-    renderPacks(data);
-  } catch (err) {
-    console.error("API Fehler:", err);
+  function progressBar(value, type){
+    const v = (typeof value === 'number' && !isNaN(value)) ? value : 0;
+    const pct = Math.max(0, Math.min(100, v));
+    return `<div class="progress" style="height:20px;"><div class="progress-bar bg-${type}" role="progressbar" style="width:${pct}%;" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100">${pct.toFixed(1)}%</div></div>`;
   }
-}
 
-function renderPacks(data) {
-  packsContainer.innerHTML = "";
-  const allPacks = Object.entries(data).filter(([_, p]) => p.id);
+  function decodeBits(value, texts, badgeClass) {
+    const bits = [];
+    for (let i = 0; i < texts.length; i++) {
+      if (value && (value & (1 << i))) bits.push(`<span class="${badgeClass} me-1">${texts[i]}</span>`);
+    }
+    return bits.length ? bits.join(' ') : "<span class='text-muted'>Keine</span>";
+  }
 
-  // ---------- Global Status ----------
-  const globalStatus = calculateGlobalStatus(allPacks);
-  const globalCard = document.createElement("div");
-  globalCard.className = "col-12";
+  function decode16Bits(value){
+    const out = [];
+    for (let i=0;i<16;i++) out.push(Boolean(value & (1<<i)));
+    return out;
+  }
 
-  const mosHtmlGlobal = MOS_BITS.map((t,i)=>{
-    const allOn = allPacks.every(([_,p]) => (p.mosfetStatus & (1<<i)));
-    const anyOn = allPacks.some(([_,p]) => (p.mosfetStatus & (1<<i)));
-    let cls = "text-muted";
-    if(allOn) cls = "text-success fw-bold";
-    else if(anyOn) cls = "text-warning fw-bold";
+  function getHeaderClass(alertVal, warnVal){
+    if (alertVal && alertVal !== 0) return "bg-danger text-white";
+    if (warnVal && warnVal !== 0) return "bg-warning text-dark";
+    return "bg-primary text-white";
+  }
 
-    return `<div class="me-3 d-inline-flex align-items-center mb-1">
-              <span class="${cls} me-1">${t}</span>
-              <button class="btn btn-sm btn-outline-success me-1" onclick="sendCommand('${t.toLowerCase()}_on')">EIN</button>
-              <button class="btn btn-sm btn-outline-danger" onclick="sendCommand('${t.toLowerCase()}_off')">AUS</button>
-            </div>`;
-  }).join("");
+  function findCellLocation(packs, targetVal){
+    for (const p of packs){
+      const cells = safeArr(p.cells);
+      const idx = cells.indexOf(targetVal);
+      if (idx >= 0) return `${p.name} (C${idx+1})`;
+    }
+    return "—";
+  }
 
-  globalCard.innerHTML = `
-  <div class="card pack-card">
-    <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
-      <span class="pack-header">Global Status</span>
-    </div>
-    <div class="card-body">
-      <div><strong>Mittlere Spannung:</strong> ${globalStatus.avgVoltage.toFixed(3)} V</div>
-      <div><strong>Summe Ströme:</strong> ${globalStatus.totalCurrent.toFixed(3)} A</div>
-      <div><strong>Mittlere NTC Temperatur:</strong> ${globalStatus.avgTemperature.toFixed(1)} °C</div>
-      <hr>
-      <div><strong>Mittlerer SOC:</strong></div>
-      <div class="progress mb-2" style="height:20px;">
-        <div class="progress-bar bg-success" role="progressbar" style="width:${globalStatus.avgSOC.toFixed(1)}%" aria-valuenow="${globalStatus.avgSOC.toFixed(1)}" aria-valuemin="0" aria-valuemax="100">
-          ${globalStatus.avgSOC.toFixed(1)}%
-        </div>
-      </div>
-      <div><strong>Mittlerer SOH:</strong></div>
-      <div class="progress mb-2" style="height:20px;">
-        <div class="progress-bar bg-info" role="progressbar" style="width:${globalStatus.avgSOH.toFixed(1)}%" aria-valuenow="${globalStatus.avgSOH.toFixed(1)}" aria-valuemin="0" aria-valuemax="100">
-          ${globalStatus.avgSOH.toFixed(1)}%
-        </div>
-      </div>
-      <hr>
-      <div><strong>Packs mit Fehler:</strong> ${globalStatus.packsWithError.length ? globalStatus.packsWithError.map(p => `<span class="badge bg-danger me-1">${p}</span>`).join('') : "<span class='text-muted'>Keine</span>"}</div>
-      <div><strong>Packs mit Warnung:</strong> ${globalStatus.packsWithWarn.length ? globalStatus.packsWithWarn.map(p => `<span class="badge bg-warning text-dark me-1">${p}</span>`).join('') : "<span class='text-muted'>Keine</span>"}</div>
-      <hr>
-      <div><strong>Max Zellspannung:</strong> ${globalStatus.maxCell.value.toFixed(3)} V (Pack: ${globalStatus.maxCell.pack}, Zelle: C${globalStatus.maxCell.index+1})</div>
-      <div><strong>Min Zellspannung:</strong> ${globalStatus.minCell.value.toFixed(3)} V (Pack: ${globalStatus.minCell.pack}, Zelle: C${globalStatus.minCell.index+1})</div>
-      <hr>
-      <div><strong>MOS Status Global:</strong></div>
-      <div class="d-flex flex-wrap mb-2">${mosHtmlGlobal}</div>
-    </div>
-  </div>
-  `;
-  packsContainer.appendChild(globalCard);
+  // MOS rendering for a single pack (no 'part' state there)
+  function renderMOSForPack(mosValue){
+    return MOS_BITS.map((t,i)=>{
+      const on = !!(mosValue & (1<<i));
+      return `<span style="display:inline-flex; align-items:center; margin-right:8px;">
+                <span class="${on?'badge-mos-on':'badge-mos-off'} me-2">${t}</span>
+                <button class="btn btn-sm btn-outline-success me-1" onclick="sendCommand('${t.toLowerCase()}_on', this.datasetPack)" data-pack="">EIN</button>
+                <button class="btn btn-sm btn-outline-danger" onclick="sendCommand('${t.toLowerCase()}_off', this.datasetPack)" data-pack="">AUS</button>
+              </span>`;
+    }).join('');
+  }
 
-  // ---------- Einzelne Packs ----------
-  allPacks.forEach(([name, pack]) => {
-    const alertBits = decodeBits(pack.swAlertFlags, ERROR_TEXTS, 'bit-active');
-    const warnBits = decodeBits(pack.swWarningFlags, ERROR_TEXTS, 'bit-warning');
-    const mosHtml = MOS_BITS.map((t,i)=>{
-      const active = (pack.mosfetStatus & (1<<i)) ? "text-success fw-bold" : "text-muted";
-      return `<div class="me-3 d-inline-flex align-items-center mb-1">
-                <span class="${active} me-1">${t}</span>
-                <button class="btn btn-sm btn-outline-success me-1" onclick="sendCommand('${t.toLowerCase()}_on','${name}')">EIN</button>
-                <button class="btn btn-sm btn-outline-danger" onclick="sendCommand('${t.toLowerCase()}_off','${name}')">AUS</button>
-              </div>`;
-    }).join("");
+  // MOS rendering for global: green=all on, yellow=some on, grey=none
+  function renderMOSGlobal(mosIndex, allPacks){
+    const allOn = allPacks.every(p => !!(p.mosfetStatus & (1<<mosIndex)));
+    const anyOn = allPacks.some(p => !!(p.mosfetStatus & (1<<mosIndex)));
+    if (allOn) return `<span class="badge-mos-on me-2">${MOS_BITS[mosIndex]}</span>`;
+    if (anyOn) return `<span class="badge-mos-part me-2">${MOS_BITS[mosIndex]}</span>`;
+    return `<span class="badge-mos-off me-2">${MOS_BITS[mosIndex]}</span>`;
+  }
 
-    const cellBal = decode16Bits(pack.hwBalancerStatus);
-    let headerClass = "bg-primary text-white";
-    if (pack.swAlertFlags !== 0) headerClass = "bg-danger text-white";
-    else if (pack.swWarningFlags !== 0) headerClass = "bg-warning text-dark";
+  // Rendering helper for pack badges (error/warn)
+  function renderPackBadges(list, cssBadgeClass){
+    if (!list || list.length === 0) return "<span class='text-muted'>Keine</span>";
+    return list.map(n => `<span class="${cssBadgeClass} me-1">${n}</span>`).join('');
+  }
 
-    const maxCellIndex = pack.cells.indexOf(Math.max(...pack.cells));
-    const minCellIndex = pack.cells.indexOf(Math.min(...pack.cells));
-    const diffCell = Math.max(...pack.cells) - Math.min(...pack.cells);
+  // ---------- Main render ----------
+  async function fetchData(){
+    try {
+      const res = await fetch("/api/bmsdata", {cache: "no-store"});
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const buf = await res.arrayBuffer();
+      const data = CBOR.decode(buf);
+      renderPacks(data);
+    } catch (e) {
+      console.error("API Fehler:", e);
+      const container = document.getElementById('packsContainer');
+      container.innerHTML = `<div class="col-12"><div class="alert alert-danger">Fehler beim Laden der Daten: ${String(e)}</div></div>`;
+    }
+  }
 
-    const cellsHTML = `
-      <div><strong>Zellen:</strong> (Δ: ${diffCell.toFixed(3)} V)</div>
-      <div class="d-flex flex-wrap mt-2">
-        ${pack.cells.map((v, i) => {
-          let bg = "#d3d3d3";
-          if (i === maxCellIndex) bg = "#ff4d4d";
-          else if (i === minCellIndex) bg = "#4d79ff";
-          const fontStyle = cellBal[i] ? "font-weight:bold; color: #b58900;" : "";
-          return `<div class="cell-field" style="background-color:${bg}; ${fontStyle}">C${i+1}: ${v.toFixed(3)} V</div>`;
-        }).join("")}
-      </div>
-    `;
+  function renderPacks(data){
+    const container = document.getElementById('packsContainer');
+    container.innerHTML = "";
 
-    const ntcHTML = `
-      <div class="mt-2"><strong>NTCs:</strong></div>
-      <div class="d-flex flex-wrap">
-        ${pack.ntcTemperature.map((t, i) => `<div class="ntc-field" style="background-color:#d3d3d3">T${i+1}: ${t.toFixed(1)} °C</div>`).join("")}
-      </div>
-    `;
+    // Convert to array of packs with names; guard against missing structure
+    const entries = Object.entries(data || {});
+    const packs = entries
+      .map(([name, p]) => ({ name, pack: p }))
+      .filter(o => o.pack && typeof o.pack.id !== 'undefined' && o.pack.id !== 0)
+      .map(o => {
+        // normalize some fields to expected names if backend might have uppercased keys
+        const p = o.pack;
+        return {
+          name: o.name,
+          id: p.id ?? p.ID ?? 0,
+          voltage: p.voltage ?? p.Volt ?? 0,
+          current: p.current ?? p.Curr ?? 0,
+          cells: Array.isArray(p.cells) ? p.cells : (Array.isArray(p.Cell) ? p.Cell : []),
+          ntcTemperature: Array.isArray(p.ntcTemperature) ? p.ntcTemperature : (Array.isArray(p.NTC) ? p.NTC : []),
+          stateOfCharge: (typeof p.stateOfCharge === 'number') ? p.stateOfCharge : (typeof p.SOC === 'number' ? p.SOC : 0),
+          stateOfHealth: (typeof p.stateOfHealth === 'number') ? p.stateOfHealth : (typeof p.SOH === 'number' ? p.SOH : 0),
+          swAlertFlags: p.swAlertFlags ?? p.Alrt ?? 0,
+          swWarningFlags: p.swWarningFlags ?? p.Warn ?? 0,
+          mosfetStatus: p.mosfetStatus ?? p.MOS ?? 0,
+          hwBalancerStatus: p.hwBalancerStatus ?? p.CellBal ?? 0,
+          dieTemperature: p.dieTemperature ?? p.Die ?? 0,
+          pvddVoltage: p.pvddVoltage ?? p.PVDD ?? 0,
+          cycleCount: p.cycleCount ?? p.Cyc ?? 0
+        };
+      });
 
-    const card = document.createElement("div");
-    card.className = "col-lg-6 col-12";
-    card.innerHTML = `
+    // If no packs, show message
+    if (packs.length === 0) {
+      container.innerHTML = `<div class="col-12"><div class="alert alert-secondary">Keine gültigen Packs (id == 0 oder leer)</div></div>`;
+      return;
+    }
+
+    // ---------- Global aggregates ----------
+    const avgVoltage = avg(packs.map(p => p.voltage));
+    const totalCurrent = sum(packs.map(p => p.current));
+    // average over all NTC readings
+    const allTemps = packs.flatMap(p => safeArr(p.ntcTemperature));
+    const avgTemp = avg(allTemps);
+    const avgSOC = avg(packs.map(p => p.stateOfCharge));
+    const avgSOH = avg(packs.map(p => p.stateOfHealth));
+
+    // max/min cell values and where
+    let maxCellVal = -Infinity, minCellVal = Infinity;
+    packs.forEach(p => {
+      safeArr(p.cells).forEach(v => {
+        if (typeof v === 'number') {
+          if (v > maxCellVal) maxCellVal = v;
+          if (v < minCellVal) minCellVal = v;
+        }
+      });
+    });
+    // find which pack/cell
+    const maxCellLoc = (maxCellVal === -Infinity) ? "—" : findCellLocation(packs, maxCellVal);
+    const minCellLoc = (minCellVal === Infinity) ? "—" : findCellLocation(packs, minCellVal);
+
+    const packsWithError = packs.filter(p => p.swAlertFlags && p.swAlertFlags !== 0).map(p => p.name);
+    const packsWithWarn = packs.filter(p => p.swWarningFlags && p.swWarningFlags !== 0).map(p => p.name);
+
+    // Build global card
+    const globalCard = document.createElement('div');
+    globalCard.className = 'col-12';
+    const globalMOSHtml = MOS_BITS.map((_,i) => renderMOSGlobal(i, packs)).join(' ');
+    globalCard.innerHTML = `
       <div class="card pack-card">
-        <div class="card-header ${headerClass} d-flex justify-content-between align-items-center">
-          <span class="pack-header">${name}</span>
-          <small>SOC: ${pack.stateOfCharge.toFixed(1)}% | SOH: ${pack.stateOfHealth.toFixed(1)}%</small>
+        <div class="card-header bg-info text-white d-flex justify-content-between align-items-center">
+          <span class="pack-header">Global Status</span>
         </div>
         <div class="card-body">
-          <div><strong>Spannung:</strong> ${pack.voltage.toFixed(3)} V</div>
-          <div><strong>Strom:</strong> ${pack.current.toFixed(3)} A</div>
-          <div><strong>Zyklen:</strong> ${pack.cycleCount.toFixed(0)}</div>
+          <div><strong>Mittlere Spannung:</strong> ${avgVoltage.toFixed(3)} V</div>
+          <div><strong>Summe Ströme:</strong> ${totalCurrent.toFixed(3)} A</div>
+          <div><strong>Mittlere Temperatur:</strong> ${avgTemp.toFixed(1)} °C</div>
+          <div class="mt-2"><strong>Max Zellspannung:</strong> ${isFinite(maxCellVal)?maxCellVal.toFixed(3)+' V':'—'} (${maxCellLoc})</div>
+          <div><strong>Min Zellspannung:</strong> ${isFinite(minCellVal)?minCellVal.toFixed(3)+' V':'—'} (${minCellLoc})</div>
           <hr>
-          <div><strong>Alarme:</strong> ${alertBits}</div>
-          <div><strong>Warnungen:</strong> ${warnBits}</div>
-          <hr>
-          <div><strong>MOS Status:</strong></div>
-          <div class="d-flex flex-wrap mb-2">${mosHtml}</div>
-          <hr>
-          <div><strong>SOC:</strong></div>
-          <div class="progress mb-2" style="height:20px;">
-            <div class="progress-bar bg-success" role="progressbar" style="width:${pack.stateOfCharge.toFixed(1)}%" aria-valuenow="${pack.stateOfCharge.toFixed(1)}" aria-valuemin="0" aria-valuemax="100">
-              ${pack.stateOfCharge.toFixed(1)}%
-            </div>
+          <div><strong>MOS Status (global):</strong></div>
+          <div class="d-flex flex-wrap align-items-center mb-2">${globalMOSHtml}</div>
+          <div class="mb-2">
+            <button class="btn btn-sm btn-outline-success me-1" onclick="sendCommand('charge_on_all')">Laden EIN (global)</button>
+            <button class="btn btn-sm btn-outline-danger me-2" onclick="sendCommand('charge_off_all')">Laden AUS (global)</button>
+            <button class="btn btn-sm btn-outline-success me-1" onclick="sendCommand('discharge_on_all')">Entladen EIN (global)</button>
+            <button class="btn btn-sm btn-outline-danger" onclick="sendCommand('discharge_off_all')">Entladen AUS (global)</button>
           </div>
-          <div><strong>SOH:</strong></div>
-          <div class="progress mb-2" style="height:20px;">
-            <div class="progress-bar bg-info" role="progressbar" style="width:${pack.stateOfHealth.toFixed(1)}%" aria-valuenow="${pack.stateOfHealth.toFixed(1)}" aria-valuemin="0" aria-valuemax="100">
-              ${pack.stateOfHealth.toFixed(1)}%
-            </div>
-          </div>
-          ${cellsHTML}
           <hr>
-          ${ntcHTML}
-          <div class="mt-2"><strong>Die:</strong> ${pack.dieTemperature.toFixed(3)}°C | <strong>PVDD:</strong> ${pack.pvddVoltage.toFixed(3)} V</div>
+          <div><strong>Packs mit Fehler:</strong> ${renderPackBadges(packsWithError, 'badge bg-danger')}</div>
+          <div><strong>Packs mit Warnung:</strong> ${renderPackBadges(packsWithWarn, 'badge bg-warning text-dark')}</div>
+          <hr>
+          <div><strong>Mittlerer SOC:</strong> ${progressBar(avgSOC,'success')}</div>
+          <div class="mt-2"><strong>Mittlerer SOH:</strong> ${progressBar(avgSOH,'info')}</div>
         </div>
       </div>
     `;
-    packsContainer.appendChild(card);
-  });
-}
+    container.appendChild(globalCard);
 
-// ---------- Hilfsfunktionen ----------
-function decodeBits(value, texts, cssClass) {
-  let bits = [];
-  for (let i=0;i<texts.length;i++){
-    if(value & (1<<i)) bits.push(`<span class="badge ${cssClass} me-1">${texts[i]}</span>`);
-  }
-  return bits.length?bits.join(" "):"<span class='text-muted'>Keine</span>";
-}
-function decode16Bits(value){ const arr=[]; for(let i=0;i<16;i++) arr.push(!!(value & (1<<i))); return arr; }
-function calculateGlobalStatus(allPacks){
-  let sumVoltage=0, sumCurrent=0, sumTemp=0, sumSOC=0, sumSOH=0, count=0;
-  let packsWithError=[], packsWithWarn=[];
-  let maxCell={value:-Infinity, pack:"", index:-1}, minCell={value:Infinity, pack:"", index:-1};
-  allPacks.forEach(([name,p])=>{
-    if(p.swAlertFlags) packsWithError.push(name);
-    if(p.swWarningFlags) packsWithWarn.push(name);
-    sumVoltage += p.voltage;
-    sumCurrent += p.current;
-    sumTemp += p.ntcTemperature.reduce((a,b)=>a+b,0)/p.ntcTemperature.length;
-    sumSOC += p.stateOfCharge;
-    sumSOH += p.stateOfHealth;
-    count++;
-    p.cells.forEach((v,i)=>{
-      if(v>maxCell.value){ maxCell.value=v; maxCell.pack=name; maxCell.index=i;}
-      if(v<minCell.value){ minCell.value=v; minCell.pack=name; minCell.index=i;}
+    // ---------- Individual pack cards ----------
+    packs.forEach(pack => {
+      // defensive values
+      const cells = safeArr(pack.cells);
+      const ntcs = safeArr(pack.ntcTemperature);
+      const maxCellIndex = cells.length ? cells.indexOf(Math.max(...cells)) : -1;
+      const minCellIndex = cells.length ? cells.indexOf(Math.min(...cells)) : -1;
+      const diffCell = (cells.length ? Math.max(...cells) - Math.min(...cells) : 0);
+
+      const alertBitsHtml = decodeBits(pack.swAlertFlags, ERROR_TEXTS, 'badge bg-danger');
+      const warnBitsHtml = decodeBits(pack.swWarningFlags, ERROR_TEXTS, 'badge bg-warning text-dark');
+
+      // MOS for this pack: show green if on, gray if off; keep buttons (per-pack)
+      const mosHtml = MOS_BITS.map((t,i) => {
+        const on = !!(pack.mosfetStatus & (1<<i));
+        const spanClass = on ? 'badge-mos-on' : 'badge-mos-off';
+        return `<div class="me-3 d-inline-flex align-items-center mb-1">
+                  <span class="${spanClass} me-1">${t}</span>
+                  <button class="btn btn-sm btn-outline-success me-1" onclick="sendCommand('${t.toLowerCase()}_on','${pack.name}')">EIN</button>
+                  <button class="btn btn-sm btn-outline-danger" onclick="sendCommand('${t.toLowerCase()}_off','${pack.name}')">AUS</button>
+                </div>`;
+      }).join('');
+
+      const maxVal = Math.max(...cells);
+      const minVal = Math.min(...cells);
+
+      const cellsHtml = `
+        <div><strong>Zellen:</strong> (Δ: ${diffCell.toFixed(3)} V)</div>
+        <div style="display:flex; flex-wrap:wrap; margin-top:5px;">
+          ${cells.map((v,i)=>{
+            let color = '#d3d3d3';
+            if (v === maxVal) color = '#ff6b6b';   // rot
+            else if (v === minVal) color = '#4dabf7'; // blau
+            return `<div class="cell-field" style="background:${color};">C${i+1}: ${typeof v === 'number' ? v.toFixed(3) : '—'} V</div>`;
+          }).join('')}
+        </div>`;
+
+      const ntcHtml = `
+        <div><strong>NTCs:</strong></div>
+        <div style="display:flex; flex-wrap:wrap;">
+          ${ntcs.map((t,i)=>`<div class="ntc-field">T${i+1}: ${typeof t==='number'?t.toFixed(1):'—'} °C</div>`).join('')}
+        </div>`;
+
+      const card = document.createElement('div');
+      card.className = 'col-lg-6 col-12';
+      card.innerHTML = `
+        <div class="card pack-card">
+          <div class="card-header ${getHeaderClass(pack.swAlertFlags, pack.swWarningFlags)} d-flex justify-content-between align-items-center">
+            <span class="pack-header">${pack.name}</span>
+            <small>SOC: ${pack.stateOfCharge.toFixed(1)}% | SOH: ${pack.stateOfHealth.toFixed(1)}%</small>
+          </div>
+          <div class="card-body">
+            <div><strong>Spannung:</strong> ${pack.voltage.toFixed(3)} V</div>
+            <div><strong>Strom:</strong> ${pack.current.toFixed(3)} A</div>
+            <div><strong>Zyklen:</strong> ${pack.cycleCount}</div>
+            <hr>
+            <div><strong>Alarme:</strong> ${alertBitsHtml}</div>
+            <div><strong>Warnungen:</strong> ${warnBitsHtml}</div>
+            <hr>
+            <div><strong>MOS Status:</strong></div>
+            <div class="d-flex flex-wrap mb-2">${mosHtml}</div>
+            <hr>
+            <div><strong>SOC:</strong></div>${progressBar(pack.stateOfCharge,'success')}
+            <div class="mt-2"><strong>SOH:</strong></div>${progressBar(pack.stateOfHealth,'info')}
+            <hr>
+            ${cellsHtml}
+            <hr>
+            ${ntcHtml}
+            <hr>
+            <div><strong>Die:</strong> ${pack.dieTemperature.toFixed(1)} °C | <strong>PVDD:</strong> ${pack.pvddVoltage.toFixed(3)} V</div>
+          </div>
+        </div>
+      `;
+      container.appendChild(card);
     });
-  });
-  return {
-    avgVoltage: sumVoltage/count,
-    totalCurrent: sumCurrent,
-    avgTemperature: sumTemp/count,
-    avgSOC: sumSOC/count,
-    avgSOH: sumSOH/count,
-    packsWithError,
-    packsWithWarn,
-    maxCell,
-    minCell
+  }
+
+  // ---------- Utilities used by render ----------
+  function renderMOSGlobal(index, packs){
+    const allOn = packs.length && packs.every(p => !!(p.mosfetStatus & (1<<index)));
+    const anyOn = packs.some(p => !!(p.mosfetStatus & (1<<index)));
+    if (allOn) return `<span class="badge-mos-on me-2">${MOS_BITS[index]}</span>`;
+    if (anyOn) return `<span class="badge-mos-part me-2">${MOS_BITS[index]}</span>`;
+    return `<span class="badge-mos-off me-2">${MOS_BITS[index]}</span>`;
+  }
+
+  function aggregateMOS(list){
+    return list.reduce((a,b)=>a|b,0);
+  }
+
+  function renderPackBadges(list, cls){
+    if (!list || list.length===0) return "<span class='text-muted'>Keine</span>";
+    return list.map(n => `<span class="${cls} me-1">${n}</span>`).join('');
+  }
+
+  // ---------- Command sender ----------
+  window.sendCommand = function(cmd, pack=null){
+    // normalize: support both 'all' style and per-pack
+    console.log('sendCommand', cmd, pack);
+    fetch('/api/cmd', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({cmd, pack})
+    }).catch(e => console.error('Command Error', e));
   };
-}
 
-function sendCommand(cmd, pack=null){
-  fetch("/api/cmd",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({cmd,pack})}).catch(e=>console.error("Command Error",e));
-}
-
-setInterval(fetchData,1000);
-fetchData();
-</script>
+  // start polling
+  setInterval(fetchData, 1000);
+  fetchData();
+  </script>
 </body>
 </html>

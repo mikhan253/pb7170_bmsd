@@ -34,11 +34,18 @@ typedef struct {
         struct {
             uint32_t CHARGE_OC : 1;
             uint32_t DISCHARGE_OC : 1;
-            uint32_t STATE_ERR : 1;
+            uint32_t SHORT : 1;
+            uint32_t CHIPSTATE_ERR : 1;
             uint32_t OVERTEMP : 1;
             uint32_t UNDERTEMP : 1;
             uint32_t COMM_ERR : 1;
-        } SW_AlertFlags_bits;
+            uint32_t DIAG_ERR : 1;
+            uint32_t PACK_OV : 1;
+            uint32_t PACK_UV : 1;
+            uint32_t CELL_OV : 1;
+            uint32_t CELL_UV : 1;
+            uint32_t CELL_MISMATCH : 1;
+        } swAlertFlags_bits;
     };
     union {
         uint32_t swWarningFlags;

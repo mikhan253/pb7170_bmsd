@@ -110,6 +110,56 @@ int AFEReadData(int id) {
     return 0;
 }
 
+int AFEErrorHandler(int id) {
+    #define SWALERT g_PackPdoData[id].swAlertFlags_bits
+    #define HWALERTFLAGS g_PackPdoData[id].hwAlertFlags_bits
+    #define HWALERTSTATE g_PackPdoData[id].hwAlertState_bits
+   SWALERT.CHARGE_OC = 
+            HWALERTFLAGS.CHARGE_OC;
+    SWALERT.DISCHARGE_OC = 
+            HWALERTFLAGS.DISCHARGE_OC;
+    SWALERT.SHORT = 
+            HWALERTFLAGS.SHORT;
+    SWALERT.CHIPSTATE_ERR = 
+            HWALERTFLAGS.WDT_OVF |
+            HWALERTFLAGS.EXT_PROT |
+            HWALERTSTATE.RESET |
+            HWALERTSTATE.SLEEP |
+            HWALERTSTATE.VREF |
+            HWALERTSTATE.LVMUX |
+            HWALERTSTATE.AVDD |
+            HWALERTSTATE.DVDD |
+            HWALERTSTATE.EEPROM_CRC_ERR |
+            HWALERTSTATE.CLOCK_ABNORMAL;
+    SWALERT.OVERTEMP =
+            HWALERTFLAGS.THERM_SD |
+            HWALERTFLAGS.TDIE_HI;
+    SWALERT.UNDERTEMP =
+            HWALERTFLAGS.TDIE_LO;
+    SWALERT.COMM_ERR =
+            HWALERTFLAGS.SPI_CRC_ERR |
+            HWALERTSTATE.SPI_CRC_ERR;
+    SWALERT.DIAG_ERR =
+            HWALERTFLAGS.AUX_OV |
+            HWALERTFLAGS.AUX_UV |
+            HWALERTFLAGS.LV |
+            HWALERTFLAGS.PVDD_UVOV;
+    SWALERT.PACK_OV =
+            HWALERTFLAGS.PACK_OV;
+    SWALERT.PACK_UV =
+            HWALERTFLAGS.PACK_UV;
+    SWALERT.CELL_OV =
+            HWALERTFLAGS.CELL_OV;
+    SWALERT.CELL_UV =
+            HWALERTFLAGS.CELL_UV;
+    SWALERT.CELL_MISMATCH =
+            HWALERTFLAGS.MISMATCH;
+
+    #undef SWALERT
+    #undef HWALERTFLAGS
+    #undef HWALERTSTATE
+    return 0;
+}
 
 int main(void) {
     if (tas_Init(255)) { //etwas größer als 250ms, um immer einen neuen wert zu bekommen
@@ -183,6 +233,8 @@ int main(void) {
                 case AFE_STATE_RUN:
                     //int altval = g_PackPdoData[curId].hwStatus_bits.SCH_CNT;
                     AFEReadData(curId);
+                    AFEErrorHandler(curId);
+
                     //int newval = g_PackPdoData[curId].hwStatus_bits.SCH_CNT;
                     //if((curId==0) && (CyclicDelta(newval,altval) != 4))
                     //    printf("PACK%u: SCH_CNT=%i (d=%i) CELL0=%f CURRENT=%f\n",curId,g_PackPdoData[curId].hwStatus_bits.SCH_CNT,CyclicDelta(newval,altval),g_PackPdoData[curId].cells[0],g_PackPdoData[curId].current);

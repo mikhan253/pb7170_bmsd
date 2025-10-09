@@ -4,6 +4,7 @@
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <math.h>
+#include <float.h>
 
 #ifdef TIME_IT
 #include <time.h>
@@ -83,37 +84,39 @@ int AFEInit(int id) {
 }
 
 int AFEReadData(int id) {
+#define PACK g_PackPdoData[id]
     uint16_t data[28];
 
     spi_AFEReadRegister(0x01, data, 16);
-    g_PackPdoData[id].hwStatus = data[0];
-    g_PackPdoData[id].hwAlertFlags = (data[2] << 16) | data[1];
-    g_PackPdoData[id].hwAlertState = (data[5] << 16) | data[4];
-    g_PackPdoData[id].hwAlertCellUnderOvervoltage = (data[7] << 16) | data[6];
-    g_PackPdoData[id].hwAlertAux = data[9];
-    g_PackPdoData[id].hwBalancerTimer = data[14];
-    g_PackPdoData[id].hwBalancerStatus = data[15];
+    PACK.hwStatus = data[0];
+    PACK.hwAlertFlags = (data[2] << 16) | data[1];
+    PACK.hwAlertState = (data[5] << 16) | data[4];
+    PACK.hwAlertCellUnderOvervoltage = (data[7] << 16) | data[6];
+    PACK.hwAlertAux = data[9];
+    PACK.hwBalancerTimer = data[14];
+    PACK.hwBalancerStatus = data[15];
 
     spi_AFEReadRegister(0x84, data, 28);
-    g_PackPdoData[id].current = (float)((int16_t)data[0]) * g_PackGeneralConfig[id]->cadcCurrentFactor;
-    g_PackPdoData[id].voltage = (float)data[1] * 1.6e-3;
-    g_PackPdoData[id].pvddVoltage = (float)data[2] * 2.5e-3;
+    PACK.current = (float)((int16_t)data[0]) * g_PackGeneralConfig[id]->cadcCurrentFactor;
+    PACK.voltage = (float)data[1] * 1.6e-3;
+    PACK.pvddVoltage = (float)data[2] * 2.5e-3;
     for(int i=0; i < 16; i++)
-        g_PackPdoData[id].cells[i] = (float)data[3 + i] * 100e-6;
+        PACK.cells[i] = (float)data[3 + i] * 100e-6;
     for(int i=0; i < 4; i++)
-        g_PackPdoData[id].ntcTemperature[i] = NtcToTemperature((float)data[20 + i], g_PackGeneralConfig[id]->ntcPolynom, 11);
-    g_PackPdoData[id].dieTemperature = (float)(25437 - data[26]) / 59.17 - 64.5;
-    g_PackPdoData[id].fastCurrent = (float)(data[27] & 0x7fff) * g_PackGeneralConfig[id]->vadcCurrentFactor;
+        PACK.ntcTemperature[i] = NtcToTemperature((float)data[20 + i], g_PackGeneralConfig[id]->ntcPolynom, 11);
+    PACK.dieTemperature = (float)(25437 - data[26]) / 59.17 - 64.5;
+    PACK.fastCurrent = (float)(data[27] & 0x7fff) * g_PackGeneralConfig[id]->vadcCurrentFactor;
     if (data[27] & 0x8000)
-        g_PackPdoData[id].fastCurrent = -g_PackPdoData[id].fastCurrent;
+        PACK.fastCurrent = -PACK.fastCurrent;
 
     return 0;
+#undef PACK
 }
 
 int AFEErrorHandler(int id) {
-    #define SWALERT g_PackPdoData[id].swAlertFlags_bits
-    #define HWALERTFLAGS g_PackPdoData[id].hwAlertFlags_bits
-    #define HWALERTSTATE g_PackPdoData[id].hwAlertState_bits
+#define SWALERT g_PackPdoData[id].swAlertFlags_bits
+#define HWALERTFLAGS g_PackPdoData[id].hwAlertFlags_bits
+#define HWALERTSTATE g_PackPdoData[id].hwAlertState_bits
    SWALERT.CHARGE_OC = 
             HWALERTFLAGS.CHARGE_OC;
     SWALERT.DISCHARGE_OC = 
@@ -155,10 +158,10 @@ int AFEErrorHandler(int id) {
     SWALERT.CELL_MISMATCH =
             HWALERTFLAGS.MISMATCH;
 
-    #undef SWALERT
-    #undef HWALERTFLAGS
-    #undef HWALERTSTATE
     return 0;
+#undef SWALERT
+#undef HWALERTFLAGS
+#undef HWALERTSTATE
 }
 
 int AFEWireDiag(uint16_t *data)
@@ -175,6 +178,31 @@ int AFEWireDiag(uint16_t *data)
                 return 1; //Kabelbruch erkannt
         }
     return 0;
+}
+
+int AFEBalancer (int id) {
+    float min_vcell=FLT_MAX;
+    float max_vcell=FLT_MIN;
+    float avg_vcell=0.;
+    
+    for(int i=0; i<16; i++) {
+        if(g_PackPdoData[id].cells[i] > max_vcell)
+            max_vcell = g_PackPdoData[id].cells[i];
+        if(g_PackPdoData[id].cells[i] < min_vcell)
+            min_vcell = g_PackPdoData[id].cells[i];
+        avg_vcell += g_PackPdoData[id].cells[i];
+    }
+    avg_vcell /= 16;
+    
+    uint32_t new_balance = 0;
+    for(int i=0; i<16; i++)
+        if((g_PackPdoData[id].cells[i] - avg_vcell) > g_PackGeneralConfig[id]->balancerDiffVoltage)
+            new_balance |= (1 << i);
+
+    spi_AFEWriteRegister(0x0c,new_balance);
+    spi_AFEWriteRegister(0x0f,40); //40 * 0,25 -> 10sek
+
+    return (new_balance>0);
 }
 
 int main(void) {
@@ -339,6 +367,13 @@ int main(void) {
                     //int altval = g_PackPdoData[curId].hwStatus_bits.SCH_CNT;
                     AFEReadData(curId);
                     AFEErrorHandler(curId);
+                    if(g_PackPdoData[curId].hwBalancerTimer == 0)
+                        for (int i=0; i<16; i++)
+                            if(g_PackPdoData[curId].cells[i] >= g_PackGeneralConfig[curId]->balancerStartVoltage) {
+                                AFEBalancer(curId);
+                                break;
+                            }
+
 
                     //int newval = g_PackPdoData[curId].hwStatus_bits.SCH_CNT;
                     //if((curId==0) && (CyclicDelta(newval,altval) != 4))

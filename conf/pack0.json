@@ -4,21 +4,15 @@
         "Type": "EVE MB31",
         "Nominal Charge [Ah]": 314.0,
         "Internal Resistance [Ohm]": 0.18e-3,
-        "Max Charge Current [dC, A]": [
-            [-10, 0.0],
-            [  0, 0.05],
-            [  5, 0.12],
-            [ 10, 0.3],
-            [ 15, 0.5],
-            [ 60, 0.0]
-        ],
-        "Max Discharge Current [dC, A]": [
-            [-30, 0.0],
-            [-20, 0.5],
-            [ 60, 0.0]
-        ],
         "Balancer Cell Startvoltage [V]": 3.45,
-        "Balancer Cell max Deltavoltage [V]": 10e-3
+        "Balancer Cell max Deltavoltage [V]": 10e-3,
+        
+        "Temperature Table [dC]":          [  -30.0,  -20.0,  -10.0,    0.0,    5.0,   10.0,   15.0,   60.0],
+        "Max Charge Current Table [A]":    [    0.0,    0.0,    0.0,   15.7,   37.6,   94.2,  157.0,    0.0],
+        "Max Discharge Current Table [A]": [    0.0, -157.0, -157.0, -157.0, -157.0, -157.0, -157.0,    0.0],
+
+        "SOC Table":     [ 0.0 , 10.0 , 20.0 , 30.0 , 40.0 , 50.0 , 60.0 , 70.0 , 80.0,  90.0 , 100.0 ],
+        "OCV Table [V]": [ 2.50,  3.00,  3.20,  3.22,  3.25,  3.26,  3.27,  3.30,  3.32,  3.35,   3.40]
     },
     "User Configuration":
     {
@@ -77,7 +71,7 @@
         [ 1.0, 4.0 ],
         [ 1.0, 4.0 ]
         ],
-        "Charge Overcurrent [A]": 100,
+        "Charge Overcurrent [A]": 140,
         "Short Circuit Current [A]": 320,
         "Discharge Overcurrent [A]": 140,
 
@@ -101,6 +95,8 @@
     },
     "Hardware Configuration":
     {
+        "Max Current [A]": 125.0,
+        "Max Current reduced [A]": 30.0,
         "Shunt Resistance": 0.5e-3,
         "NTC Polynom": [
             -6.419316075453663e-45, -6.977648919699077e-38, 

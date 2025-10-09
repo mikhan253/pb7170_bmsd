@@ -179,6 +179,11 @@ typedef struct __attribute__((packed)) {
 } PACK_USERCONF_t;
 
 typedef struct {
+    float bmsMaxCurrent;
+    float bmsMaxCurrentReduced;
+    float batTableTemperature[8];
+    float batTableChargeCurrent[8];
+    float batTableDischargeCurrent[8];
     float balancerStartVoltage;
     float balancerDiffVoltage;
     float cadcCurrentFactor;

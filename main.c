@@ -55,7 +55,7 @@ int AFEInit(int id) {
                g_PackUserConfig[id][start + len].address > 0)
             len++;
 
-        // Schreibe die Register einzeln (wie bisher)
+        // Schreibe die Register einzeln
         for (uint32_t j = 0; j < len; j++) {
             spi_AFEWriteRegister(
                 g_PackUserConfig[id][start + j].address,
@@ -161,7 +161,28 @@ int AFEErrorHandler(int id) {
     return 0;
 }
 
+int AFEWireDiag(uint16_t *data)
+{
+#define KABELBRUCH_MAX_DELTA 200
+    for(int i=16; i<=32;i+=16)
+        for(int j=0; j<16;j++)
+        {
+            int32_t delta;
+            delta = data[j] - data[i+j];
+            if(delta < 0)
+                delta = -delta;
+            if((delta >= KABELBRUCH_MAX_DELTA))
+                return 1; //Kabelbruch erkannt
+        }
+    return 0;
+}
+
 int main(void) {
+    uint32_t diagLock = 0;
+
+    uint64_t timerExpirations;
+    uint16_t diagData[16 * 3];
+
     if (tas_Init(255)) { //etwas größer als 250ms, um immer einen neuen wert zu bekommen
         printf("Failed to set up task\n");
         return 1;
@@ -176,7 +197,7 @@ int main(void) {
     dob_LoadPackConfigs();
 
     while (1) {
-        uint64_t timerExpirations;
+
         read(g_timerFd, &timerExpirations, sizeof(timerExpirations));  // blockiert bis Timer feuert
         if (timerExpirations != 1)
             printf("Timer expired %llu times\n", (unsigned long long)timerExpirations);
@@ -192,14 +213,16 @@ int main(void) {
                 continue;
             spi_SelectDevice(curId);
 
-            uint16_t data;
-
-
             switch(g_PackPdoData[curId].stateMachine)
             {
                 case AFE_STATE_WAIT_INIT:
-                    spi_AFEReadRegister(0x00, &data, 1);
-                    if (data == 0x6000) { /* TOP_STATUS muss auf Power-up Complete sein */
+                    /*********************************************
+                     * Überprüfe, ob AFE erkannt wurde
+                     * JA   -> Starte Initialisierung
+                     * NEIN -> Warte
+                     *********************************************/
+                    spi_AFEReadRegister(0x00, &diagData[0], 1);
+                    if (diagData[0] == 0x6000) { /* TOP_STATUS muss auf Power-up Complete sein */
                         printf("PACK%u: PB7170 gefunden, initialisiere...\n", g_PackPdoData[curId].id);
 
                         /* Safe Mode */
@@ -210,6 +233,11 @@ int main(void) {
                     }
                     break;
                 case AFE_STATE_INIT:
+                    /*********************************************
+                     * Lade Userconfig für das AFE
+                     * OK   -> Starte Diagnose
+                     * NEIN -> Fehler
+                     *********************************************/
                     spi_AFEWriteRegister(0x45,0x95); // USER Unlock
                     if (AFEInit(curId) == 0) {
                         spi_AFEWriteRegister(0x45,0x00); // USER lock
@@ -217,19 +245,96 @@ int main(void) {
                         spi_AFEWriteRegister(0x0d,31); //Setup Balancer
 
                         printf("PACK%u: Userconfig erfolgreich geschrieben\n", g_PackPdoData[curId].id);
-                        g_PackPdoData[curId].stateMachine = AFE_STATE_CONFIG;
+                        g_PackPdoData[curId].stateMachine = AFE_STATE_WAIT_DIAG0;
                     } else {
                         printf("PACK%u: Fehler beim Schreiben der Userconfig\n", g_PackPdoData[curId].id);
                         g_PackPdoData[curId].stateMachine = AFE_STATE_ERROR;
                         break;
                     }
-                    
-                    
+                    break;
+                case AFE_STATE_WAIT_DIAG0:
+                    /*********************************************
+                     * Kabelbruchdiagnose gestartet, warte bis
+                     * Werte für Zellen bereit sind, bzw.
+                     * Diagnose ist nur eine gleichzeitig erlaubt
+                     * OK   -> Ein Zyklus warten
+                     * NEIN -> Warten
+                     *********************************************/
+                    if(diagLock == 0)
+                    {
+                        diagLock = 1;
+                        spi_AFEWriteRegister(0x43,0xa8); //DIAG_Unlock
+                        g_PackPdoData[curId].stateMachine = AFE_STATE_DIAG0;
+                    }
+                    break;
+                case AFE_STATE_DIAG0:
+                    /*********************************************
+                     * Merke Werte für Standard
+                     * Setze alle Zellen auf Diagnose-Pullup
+                     *********************************************/
+                    spi_AFEReadRegister(0x87,&diagData[0],16); //Werte Standard
+                    // Set Pull-Up
+                    spi_AFEWriteRegister(0x50,0xffff);
+                    spi_AFEWriteRegister(0x51,0x0000);
+                    spi_AFEWriteRegister(0x52,0x0004);
+                    g_PackPdoData[curId].stateMachine = AFE_STATE_WAIT_DIAG1;
+                    break;
+                case AFE_STATE_WAIT_DIAG1:
+                    g_PackPdoData[curId].stateMachine = AFE_STATE_DIAG1;
+                    break;
+                case AFE_STATE_DIAG1:
+                    /*********************************************
+                     * Merke Werte für Pullup
+                     * Setze alle Zellen auf Diagnose-Pulldown
+                     *********************************************/
+                    spi_AFEReadRegister(0x87,&diagData[16],16); //Werte Pullup
+                    // Set Pull-Down
+                    spi_AFEWriteRegister(0x50,0x0000);
+                    spi_AFEWriteRegister(0x51,0xffff);
+                    spi_AFEWriteRegister(0x52,0x0001);
+                    g_PackPdoData[curId].stateMachine = AFE_STATE_WAIT_DIAG2;
+                    break;
+                case AFE_STATE_WAIT_DIAG2:
+                    g_PackPdoData[curId].stateMachine = AFE_STATE_DIAG2;
+                    break;
+                case AFE_STATE_DIAG2:
+                    /*********************************************
+                     * Merke Werte für Pulldown
+                     * Setze alle Zellen auf Standard
+                     * Kabelbrucherkennung
+                     *********************************************/
+                    spi_AFEReadRegister(0x87,&diagData[32],16); //Werte Pulldown
+                    // Disable all
+                    spi_AFEWriteRegister(0x50,0x0000);
+                    spi_AFEWriteRegister(0x51,0x0000);
+                    spi_AFEWriteRegister(0x52,0x0000);
 
+                    spi_AFEWriteRegister(0x43,0x0); //DIAG_Lock                    
+                    diagLock = 0;
+
+                    if(AFEWireDiag(diagData))
+                    {
+                        printf("PACK%u: Diagnose fehlerhaft, deaktiviere Pack\n", g_PackPdoData[curId].id);
+                        g_PackPdoData[curId].swAlertFlags_bits.DIAG_ERR = 1;
+                        g_PackPdoData[curId].stateMachine = AFE_STATE_ERROR;
+                    }
+                    else
+                    {
+                        printf("PACK%u: Diagnose erfolgreich\n", g_PackPdoData[curId].id);
+                        g_PackPdoData[curId].stateMachine = AFE_STATE_CONFIG;
+                    }
                     break;
                 case AFE_STATE_CONFIG:
+                    // Lösche alle Fehler
+                    spi_AFEWriteRegister(0x02,0xFFFF);
+                    spi_AFEWriteRegister(0x03,0xFFFF);
+                    spi_AFEWriteRegister(0x05,0xC000);
+                    
+                    printf("PACK%u: Konfiguration fertig, RUN-Mode\n", g_PackPdoData[curId].id);
                     g_PackPdoData[curId].stateMachine = AFE_STATE_RUN;
                     break;
+                case AFE_STATE_SANITY_CHECK:
+                    //AFESanityCheck(curId);
                 case AFE_STATE_RUN:
                     //int altval = g_PackPdoData[curId].hwStatus_bits.SCH_CNT;
                     AFEReadData(curId);

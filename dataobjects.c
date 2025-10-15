@@ -10,6 +10,7 @@
 
 // SHMEM Objekt
 PACK_PDO_t* g_PackPdoData = NULL;
+PACK_SDO_t* g_PackSdoData = NULL;
 
 // Globale Arrays
 PACK_USERCONF_t* g_PackUserConfig[MAX_BATTERY_PACKS];
@@ -18,7 +19,7 @@ PACK_CALIBRATION_t* g_PackCalibration[MAX_BATTERY_PACKS];
 uint16_t g_packEnabled = 0;
 
 // SHMEM Konfiguration
-#define SHM_NAME "/battery_pdo_shm"
+
 
 // ---------------------------------------------------------
 // generische Datei-Ladefunktion
@@ -97,39 +98,42 @@ static void PrintLoadState(const char* filename, int duplicate_of) {
 
 // ---------------------------------------------------------
 // SHMEM initialisieren
-static int InitShmem(void) {
-    shm_unlink(SHM_NAME); // lösche altes Objekt
+static int InitShmem(void* target, char* name, size_t size) {
+    shm_unlink(name); // lösche altes Objekt
 
-    int shm_fd = shm_open(SHM_NAME, O_CREAT | O_RDWR, 0666);
+    int shm_fd = shm_open(name, O_CREAT | O_RDWR, 0666);
     if (shm_fd < 0) {
         perror("shm_open");
         return -1;
     }
 
-    if (ftruncate(shm_fd, sizeof(PACK_PDO_t) * MAX_BATTERY_PACKS) != 0) {
+    if (ftruncate(shm_fd, size) != 0) {
         perror("ftruncate");
         close(shm_fd);
         return -1;
     }
 
-    g_PackPdoData = mmap(NULL, sizeof(PACK_PDO_t) * MAX_BATTERY_PACKS,
-                            PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
-    if (g_PackPdoData == MAP_FAILED) {
+    target = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
+    if (target == MAP_FAILED) {
         perror("mmap");
         close(shm_fd);
         return -1;
     }
 
-    memset(g_PackPdoData, 0, sizeof(PACK_PDO_t) * MAX_BATTERY_PACKS); // Speicher initialisieren
-    printf("Shared Memory: " SHM_NAME " (size=%u)\n",sizeof(PACK_PDO_t) * MAX_BATTERY_PACKS);
+    memset(target, 0, size); // Speicher initialisieren
+    printf("Shared Memory: %s (size=%u)\n",name, size);
     close(shm_fd);
     return 0;
 }
 
 void dob_LoadPackConfigs(void)
 {
-    if (InitShmem() != 0) {
-        printf("Fehler: SHMEM konnte nicht initialisiert werden.\n");
+    if (InitShmem(g_PackPdoData, "/battery_pdo_shm", sizeof(PACK_PDO_t) * MAX_BATTERY_PACKS) != 0) {
+        printf("Fehler: SHMEM_PDO konnte nicht initialisiert werden.\n");
+        return;
+    }
+    if (InitShmem(g_PackSdoData, "/battery_sdo_shm", sizeof(PACK_SDO_t) * MAX_BATTERY_PACKS) != 0) {
+        printf("Fehler: SHMEM_SDO konnte nicht initialisiert werden.\n");
         return;
     }
 

@@ -33,12 +33,16 @@ typedef struct {
     union {
         uint32_t swAlertFlags;
         struct {
-            uint32_t CHARGE_OC : 1;
-            uint32_t DISCHARGE_OC : 1;
+            uint32_t HW_CHARGE_OC : 1;
+            uint32_t HW_DISCHARGE_OC : 1;
+            uint32_t SW_CHARGE_OC : 1;
+            uint32_t SW_DISCHARGE_OC : 1;
             uint32_t SHORT : 1;
             uint32_t CHIPSTATE_ERR : 1;
-            uint32_t OVERTEMP : 1;
-            uint32_t UNDERTEMP : 1;
+            uint32_t HW_OVERTEMP : 1;
+            uint32_t HW_UNDERTEMP : 1;
+            uint32_t PACK_OVERTEMP : 1;
+            uint32_t PACK_UNDERTEMP : 1;
             uint32_t TEMP_MISMATCH : 1;
             uint32_t COMM_ERR : 1;
             uint32_t DIAG_ERR : 1;
@@ -47,6 +51,8 @@ typedef struct {
             uint32_t CELL_OV : 1;
             uint32_t CELL_UV : 1;
             uint32_t CELL_MISMATCH : 1;
+            uint32_t PRECHARGE_FAIL : 1;
+            uint32_t CURRENT_ABNORMAL : 1;
         } swAlertFlags_bits;
     };
     union {
@@ -165,13 +171,19 @@ typedef struct {
     float pvddVoltage;
     float availableChargeCurrent;
     float availableDischargeCurrent;
-
     float availableCapacity;
     float totalCapacity;
     float stateOfCharge;
     float stateOfHealth;
     float cycleCount;
 } PACK_PDO_t;
+
+typedef struct {
+    uint32_t ChargeEnable;
+    uint32_t DischargeEnable;
+    uint32_t swAlertFlagsClear;
+    uint32_t ResetStateMachine;
+} PACK_SDO_t;
 
 /**************** Konfigurationsdateien ****************/
 typedef struct __attribute__((packed)) {
@@ -211,6 +223,7 @@ typedef struct {
 } PACK_CALIBRATION_t;
 
 extern PACK_PDO_t* g_PackPdoData;
+extern PACK_SDO_t* g_PackSdoData;
 extern PACK_USERCONF_t* g_PackUserConfig[MAX_BATTERY_PACKS];
 extern PACK_GENERALCONF_t* g_PackGeneralConfig[MAX_BATTERY_PACKS];
 extern PACK_CALIBRATION_t* g_PackCalibration[MAX_BATTERY_PACKS];

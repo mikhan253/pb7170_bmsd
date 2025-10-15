@@ -9,7 +9,7 @@ CXX := $(CROSS_COMPILE)g++
 AR := $(CROSS_COMPILE)ar
 
 # Source files
-SRC = main.c tasksetup.c spi.c dataobjects.c
+SRC = main.c tasksetup.c spi.c dataobjects.c bms.c
 OBJS := $(SRC:.c=.o)
 
 # Output binary

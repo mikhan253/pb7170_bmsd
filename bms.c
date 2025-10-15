@@ -30,6 +30,29 @@ static inline void AFESafeMode() {
     spi_AFEWriteRegister(0x0c, 0); // Alle Balancer aus
 }
 
+static inline void AFEDiagUnlock() {
+    spi_AFEWriteRegister(0x43,0xa8);
+}
+
+static inline void AFEDiagPullUp() {
+    spi_AFEWriteRegister(0x50,0xffff);
+    spi_AFEWriteRegister(0x51,0x0000);
+    spi_AFEWriteRegister(0x52,0x0004);
+}
+
+static inline void AFEDiagPullDown() {
+    spi_AFEWriteRegister(0x50,0x0000);
+    spi_AFEWriteRegister(0x51,0xffff);
+    spi_AFEWriteRegister(0x52,0x0001);
+}
+
+static inline void AFEDiagClearLock() {
+    spi_AFEWriteRegister(0x50,0x0000);
+    spi_AFEWriteRegister(0x51,0x0000);
+    spi_AFEWriteRegister(0x52,0x0000);
+    spi_AFEWriteRegister(0x43,0x0);
+}
+
 void bms_CyclicTask(uint32_t id) {
     switch(PACK_PDO.stateMachine)
     {
@@ -70,7 +93,7 @@ void bms_CyclicTask(uint32_t id) {
              *********************************************/
             if(diagLock == 0) {
                 diagLock = 1;
-                spi_AFEWriteRegister(0x43,0xa8); //DIAG_Unlock
+                AFEDiagUnlock();
                 PACK_PDO.stateMachine = AFE_STATE_DIAG0;
             }
             break;
@@ -80,10 +103,7 @@ void bms_CyclicTask(uint32_t id) {
              * Setze alle Zellen auf Diagnose-Pullup
              *********************************************/
             spi_AFEReadRegister(0x87,&diagData[0],16); //Werte Standard
-            // Set Pull-Up
-            spi_AFEWriteRegister(0x50,0xffff);
-            spi_AFEWriteRegister(0x51,0x0000);
-            spi_AFEWriteRegister(0x52,0x0004);
+            AFEDiagPullUp();
             PACK_PDO.stateMachine = AFE_STATE_WAIT_DIAG1;
             break;
         case AFE_STATE_WAIT_DIAG1:
@@ -95,10 +115,7 @@ void bms_CyclicTask(uint32_t id) {
              * Setze alle Zellen auf Diagnose-Pulldown
              *********************************************/
             spi_AFEReadRegister(0x87,&diagData[16],16); //Werte Pullup
-            // Set Pull-Down
-            spi_AFEWriteRegister(0x50,0x0000);
-            spi_AFEWriteRegister(0x51,0xffff);
-            spi_AFEWriteRegister(0x52,0x0001);
+            AFEDiagPullDown();
             PACK_PDO.stateMachine = AFE_STATE_WAIT_DIAG2;
             break;
         case AFE_STATE_WAIT_DIAG2:
@@ -111,11 +128,7 @@ void bms_CyclicTask(uint32_t id) {
              * Kabelbrucherkennung
              *********************************************/
             spi_AFEReadRegister(0x87,&diagData[32],16); //Werte Pulldown
-            // Disable all
-            spi_AFEWriteRegister(0x50,0x0000);
-            spi_AFEWriteRegister(0x51,0x0000);
-            spi_AFEWriteRegister(0x52,0x0000);
-            spi_AFEWriteRegister(0x43,0x0); //DIAG_Lock                    
+            AFEDiagClearLock();
             diagLock = 0;
 
             if(AFEWireDiag(diagData)) {
@@ -137,7 +150,11 @@ void bms_CyclicTask(uint32_t id) {
             PACK_PDO.stateMachine = AFE_STATE_RUN;
             break;
         case AFE_STATE_SANITY_CHECK:
-            //AFESanityCheck(curId);
+            if(AFEVerifyUser(id)) {
+                printf("PACK%u: Sanity-Check fehlerhaft, deaktiviere Pack\n", PACK_PDO.id);
+                PACK_PDO_SWALERTFLAG_BITS.CHIPSTATE_ERR = 1;
+                PACK_PDO.stateMachine = AFE_STATE_ERROR;
+            }
         case AFE_STATE_RUN:
             AFEReadData(id);
             CalcOverCurrent(id);
@@ -240,6 +257,9 @@ static void ErrorHandler(int id) {
 static void MosControl(int id) {
     uint16_t mosVal=0;
 
+    if(PACK_SDO.ChargeEnable && !PACK_PDO.mosfetStatus_bits.CHARGE)
+        PrechargeCnt = xx; //max 1 sek 80j, dann 25sek pause
+    
     if(Precharge)
         mosVal |= (1 << 2);
     if(PACK_SDO.ChargeEnable && (PACK_PDO_SWALERTFLAG_BITS.SW_CHARGE_OC...))
@@ -251,10 +271,30 @@ static void MosControl(int id) {
 
 static uint32_t AFEInit(int id) {
     uint32_t i = 0;
-    spi_AFEWriteRegister(0x45,0x95); // USER Unlock
 
+    AFEWriteUser(id);
+    if(AFEVerifyUser(id))
+        return 1;
+    spi_AFEWriteRegister(0x05,0x4000); //Clear RESET Flag
+    spi_AFEWriteRegister(0x0d,31); //Setup Balancer
+    return 0;
+}
+
+static void AFEWriteUser(int id) {
+    spi_AFEWriteRegister(0x45,0x95); // USER Unlock
+    uint32_t i=0;
     while (g_PackUserConfig[id][i].address > 0) {
-        // Beginn eines zusammenhängenden Blocks
+        spi_AFEWriteRegister(
+            g_PackUserConfig[id][i].address,
+            g_PackUserConfig[id][i].data);
+        i++;
+    }
+    spi_AFEWriteRegister(0x45,0x95); // USER Unlock
+}
+
+static uint32_t AFEVerifyUser(int id) {
+    uint32_t i=0;
+    while (g_PackUserConfig[id][i].address > 0) {
         uint32_t start = i;
         uint32_t len = 1;
 
@@ -264,14 +304,6 @@ static uint32_t AFEInit(int id) {
                len < 32 &&
                g_PackUserConfig[id][start + len].address > 0)
             len++;
-
-        // Schreibe die Register einzeln
-        for (uint32_t j = 0; j < len; j++) {
-            spi_AFEWriteRegister(
-                g_PackUserConfig[id][start + j].address,
-                g_PackUserConfig[id][start + j].data
-            );
-        }
 
         // Lese den ganzen Block auf einmal
         uint16_t readback[32]; // max Blockgröße
@@ -284,15 +316,10 @@ static uint32_t AFEInit(int id) {
         // Vergleiche jedes Register im Block
         for (uint32_t j = 0; j < len; j++)
             if (g_PackUserConfig[id][start + j].data != readback[j])
-                return -1;
+                return 1;
 
         i += len; // Nächster Block
     }
-
-    spi_AFEWriteRegister(0x45,0x00); // USER lock
-
-    spi_AFEWriteRegister(0x05,0x4000); //Clear RESET Flag
-    spi_AFEWriteRegister(0x0d,31); //Setup Balancer
     return 0;
 }
 

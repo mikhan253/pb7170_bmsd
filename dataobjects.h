@@ -179,16 +179,21 @@ typedef struct __attribute__((packed)) {
 } PACK_USERCONF_t;
 
 typedef struct {
+    float batteryNominalCapacity;
+    float batteryNominalResistance;
     float bmsMaxCurrent;
     float bmsMaxCurrentReduced;
-    float batTableTemperature[8];
-    float batTableChargeCurrent[8];
-    float batTableDischargeCurrent[8];
     float balancerStartVoltage;
     float balancerDiffVoltage;
     float cadcCurrentFactor;
     float vadcCurrentFactor;
     float ntcPolynom[11];
+    float currentTableTemperature[10];
+    float currentTableChargeCurrent[10];
+    float currentTableDischargeCurrent[10];
+    float ocvTableSOC[11];
+    float ocvTableVoltage[11];
+    
 } PACK_GENERALCONF_t;
 
 typedef struct {

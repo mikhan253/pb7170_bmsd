@@ -422,27 +422,59 @@ FILENAME=f'pack{ID}_generalconf.bin'
 print(FILENAME)
 
 generalconf_blob = array.array('f', [
-    #float balancer_start_voltage;
+    #float batteryNominalCapacity;
+    configdata["Battery Configuration"]["Nominal Capacity [Ah]"],
+    #float batteryNominalResistance;
+    configdata["Battery Configuration"]["Internal Resistance [Ohm]"],
+    #float bmsMaxCurrent;
+    configdata["Hardware Configuration"]["Max Current [A]"],
+    #float bmsMaxCurrentReduced;
+    configdata["Hardware Configuration"]["Max Current reduced [A]"],
+    #float balancerStartVoltage;
     configdata["Battery Configuration"]["Balancer Cell Startvoltage [V]"],
-    #float balancer_diff_voltage;
+    #float balancerDiffVoltage;
     configdata["Battery Configuration"]["Balancer Cell max Deltavoltage [V]"],
-    #float current_cadc_factor;
+    #float cadcCurrentFactor;
     250 / (int(configdata["User Configuration"]["CADC Period [ms]"]/62.5)*8000) * 1e-3 / configdata["Hardware Configuration"]["Shunt Resistance"] ,
-    #float current_vadc_factor;
+    #float vadcCurrentFactor;
     200e-6 / configdata["User Configuration"]["Shunt amplification fast current"] / configdata["Hardware Configuration"]["Shunt Resistance"],
-    #float ntc_polynom[11];
-    configdata["Hardware Configuration"]["NTC Polynom"][0],
-    configdata["Hardware Configuration"]["NTC Polynom"][1],
-    configdata["Hardware Configuration"]["NTC Polynom"][2],
-    configdata["Hardware Configuration"]["NTC Polynom"][3],
-    configdata["Hardware Configuration"]["NTC Polynom"][4],
-    configdata["Hardware Configuration"]["NTC Polynom"][5],
-    configdata["Hardware Configuration"]["NTC Polynom"][6],
-    configdata["Hardware Configuration"]["NTC Polynom"][7],
-    configdata["Hardware Configuration"]["NTC Polynom"][8],
-    configdata["Hardware Configuration"]["NTC Polynom"][9],
-    configdata["Hardware Configuration"]["NTC Polynom"][10]
     ])
+
+#float ntcPolynom[11];
+if len(configdata["Hardware Configuration"]["NTC Polynom"]) == 11:
+    generalconf_blob.extend(configdata["Hardware Configuration"]["NTC Polynom"])
+else:
+    raise ValueError("NTC Polynom nicht 10. Ordnung")
+
+#float currentTableTemperature[10];
+if len(configdata["Battery Configuration"]["Temperature CurrentTable [dC]"]) > 10:
+    raise ValueError("Mehr als 10 Elemente in Temperature CurrentTable [dC]")
+generalconf_blob.extend(configdata["Battery Configuration"]["Temperature CurrentTable [dC]"])
+generalconf_blob.extend([configdata["Battery Configuration"]["Temperature CurrentTable [dC]"][-1]] * (10 - len(configdata["Battery Configuration"]["Temperature CurrentTable [dC]"])))
+
+#float currentTableChargeCurrent[10];
+if len(configdata["Battery Configuration"]["Max Charge CurrentTable [A]"]) > 10:
+    raise ValueError("Mehr als 10 Elemente in Max Charge CurrentTable [A]")
+generalconf_blob.extend(configdata["Battery Configuration"]["Max Charge CurrentTable [A]"])
+generalconf_blob.extend([configdata["Battery Configuration"]["Max Charge CurrentTable [A]"][-1]] * (10 - len(configdata["Battery Configuration"]["Max Charge CurrentTable [A]"])))
+
+#float currentTableDischargeCurrent[10];
+if len(configdata["Battery Configuration"]["Max Discharge CurrentTable [A]"]) > 10:
+    raise ValueError("Mehr als 10 Elemente in Max Discharge CurrentTable [A]")
+generalconf_blob.extend(configdata["Battery Configuration"]["Max Discharge CurrentTable [A]"])
+generalconf_blob.extend([configdata["Battery Configuration"]["Max Discharge CurrentTable [A]"][-1]] * (10 - len(configdata["Battery Configuration"]["Max Discharge CurrentTable [A]"])))
+
+#float ocvTableSOC[11];
+if len(configdata["Battery Configuration"]["SOC OCV-Table"]) > 11:
+    raise ValueError("Mehr als 11 Elemente in SOC OCV-Table")
+generalconf_blob.extend(configdata["Battery Configuration"]["SOC OCV-Table"])
+generalconf_blob.extend([configdata["Battery Configuration"]["SOC OCV-Table"][-1]] * (11 - len(configdata["Battery Configuration"]["SOC OCV-Table"])))
+
+#float ocvTableVoltage[11];
+if len(configdata["Battery Configuration"]["Voltage OCV-Table [V]"]) > 11:
+    raise ValueError("Mehr als 11 Elemente in Voltage OCV-Table")
+generalconf_blob.extend(configdata["Battery Configuration"]["Voltage OCV-Table [V]"])
+generalconf_blob.extend([configdata["Battery Configuration"]["Voltage OCV-Table [V]"][-1]] * (11 - len(configdata["Battery Configuration"]["Voltage OCV-Table [V]"])))
 
 print("->", ' '.join(f"{x:.3e}" for x in generalconf_blob))
 with open(FILENAME, 'wb') as datei:

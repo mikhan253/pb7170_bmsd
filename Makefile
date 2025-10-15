@@ -16,7 +16,7 @@ OBJS := $(SRC:.c=.o)
 TARGET := bmsd
 
 # Compiler flags
-CFLAGS := -O2 -Wall -lgpiod
+CFLAGS := -O2 -Wall -lgpiod -lm
 
 CFLAGS += -mcpu=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard -ffast-math -ftree-vectorize -fomit-frame-pointer
 

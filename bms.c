@@ -257,14 +257,32 @@ static void ErrorHandler(int id) {
 static void MosControl(int id) {
     uint16_t mosVal=0;
 
-    if(PACK_SDO.ChargeEnable && !PACK_PDO.mosfetStatus_bits.CHARGE)
-        PrechargeCnt = xx; //max 1 sek 80j, dann 25sek pause
-    
+    PrechargeCnt = xx; //max 1 sek 80j, dann 25sek pause
+
     if(Precharge)
         mosVal |= (1 << 2);
     if(PACK_SDO.ChargeEnable && (PACK_PDO_SWALERTFLAG_BITS.SW_CHARGE_OC...))
         mosVal |= (1 << 1);
-    if(PACK_SDO.DischargeEnable && (PACK_PDO_SWALERTFLAG_BITS.SW_CHARGE_OC...))
+    if( PACK_SDO.DischargeEnable && 
+        !PACK_PDO_SWALERTFLAG_BITS.HW_DISCHARGE_OC &&
+        !PACK_PDO_SWALERTFLAG_BITS.SHORT &&
+
+            uint32_t HW_DISCHARGE_OC : 1;
+            uint32_t SW_DISCHARGE_OC : 1;
+            uint32_t SHORT : 1;
+            uint32_t CHIPSTATE_ERR : 1;
+            uint32_t HW_OVERTEMP : 1;
+            uint32_t HW_UNDERTEMP : 1;
+            uint32_t PACK_OVERTEMP : 1;
+            uint32_t PACK_UNDERTEMP : 1;
+            uint32_t TEMP_MISMATCH : 1;
+            uint32_t COMM_ERR : 1;
+            uint32_t DIAG_ERR : 1;
+            uint32_t PACK_UV : 1;
+            uint32_t CELL_UV : 1;
+            uint32_t PRECHARGE_FAIL : 1;
+            uint32_t CURRENT_ABNORMAL : 1;        
+        
         mosVal |= (1 << 0);
     
 }

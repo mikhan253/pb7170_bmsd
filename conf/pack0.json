@@ -40,8 +40,6 @@
         "Watchdog"
         ],
         "Alert": [
-        "Load Detection",
-        "Charge Detection",
         "Pack Low Voltage",
         "Cell Overvoltage",
         "Cell Undervoltage",

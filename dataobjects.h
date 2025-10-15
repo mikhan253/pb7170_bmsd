@@ -39,6 +39,7 @@ typedef struct {
             uint32_t CHIPSTATE_ERR : 1;
             uint32_t OVERTEMP : 1;
             uint32_t UNDERTEMP : 1;
+            uint32_t TEMP_MISMATCH : 1;
             uint32_t COMM_ERR : 1;
             uint32_t DIAG_ERR : 1;
             uint32_t PACK_OV : 1;

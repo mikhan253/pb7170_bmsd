@@ -41,6 +41,64 @@ float NtcToTemperature(float value, const float *ntcCurve, int len)
     return result;
 }
 
+void SwCalcOverCurrent(int id) {
+    float chargeCurrent;
+    float dischargeCurrent;
+    float temperature=FLT_MAX;
+    uint32_t tableId;
+
+    for(int i = 0; i < 4; i++) //Minimaltemperatur suchen
+        if(temperature > g_PackPdoData[id].ntcTemperature[i])
+            temperature = g_PackPdoData[id].ntcTemperature[i];
+
+    if(g_PackPdoData[id].mosfetStatus_bits.CHARGE && g_PackPdoData[id].mosfetStatus_bits.DISCHARGE) //Beide Mosfets ein?
+    {
+        chargeCurrent = g_PackGeneralConfig[id]->bmsMaxCurrent;
+        dischargeCurrent = -g_PackGeneralConfig[id]->bmsMaxCurrent;
+    }
+    else
+    {
+        chargeCurrent = g_PackGeneralConfig[id]->bmsMaxCurrentReduced;
+        dischargeCurrent = -g_PackGeneralConfig[id]->bmsMaxCurrentReduced;
+    }
+
+    for(tableId = 10; tableId >= 0; --tableId) //Temperaturtabelle durchsuchen
+        if(temperature >= g_PackGeneralConfig[id]->currentTableTemperature[tableId])
+            break;
+
+    if (chargeCurrent > g_PackGeneralConfig[id]->currentTableChargeCurrent[tableId])
+        chargeCurrent = g_PackGeneralConfig[id]->currentTableChargeCurrent[tableId];
+    if (dischargeCurrent < g_PackGeneralConfig[id]->currentTableDischargeCurrent[tableId])
+        dischargeCurrent = g_PackGeneralConfig[id]->currentTableDischargeCurrent[tableId];
+
+    g_PackPdoData[id].availableChargeCurrent = chargeCurrent;
+    g_PackPdoData[id].availableDischargeCurrent = dischargeCurrent;
+}
+
+void SwErrorHandler(int id) {
+#define PACK g_PackPdoData[id]
+#define SWALERT g_PackPdoData[id].swAlertFlags_bits
+    if(PACK.current > PACK.availableChargeCurrent)
+        SWALERT.CHARGE_OC = 1;
+    if(PACK.current < PACK.availableDischargeCurrent)
+        SWALERT.DISCHARGE_OC = 1;
+
+    float minTemperature=FLT_MAX;
+    float maxTemperature=FLT_MIN;
+    for(int i = 0; i < 4; i++) { //Minimaltemperatur suchen
+        if(maxTemperature >PACK.ntcTemperature[i])
+            maxTemperature = PACK.ntcTemperature[i];
+        if(minTemperature < PACK.ntcTemperature[i])
+            minTemperature = PACK.ntcTemperature[i];
+    }
+    if(maxTemperature > g_PackGeneralConfig[id]->currentTableTemperature[9])
+        SWALERT.OVERTEMP = 1;
+    if(minTemperature < g_PackGeneralConfig[id]->currentTableTemperature[0])
+        SWALERT.UNDERTEMP = 1;
+#undef SWALERT
+#undef PACK
+}
+
 int AFEInit(int id) {
     uint32_t i = 0;
 
@@ -113,17 +171,17 @@ int AFEReadData(int id) {
 #undef PACK
 }
 
-int AFEErrorHandler(int id) {
+void AFEErrorHandler(int id) {
 #define SWALERT g_PackPdoData[id].swAlertFlags_bits
 #define HWALERTFLAGS g_PackPdoData[id].hwAlertFlags_bits
 #define HWALERTSTATE g_PackPdoData[id].hwAlertState_bits
-   SWALERT.CHARGE_OC = 
+    SWALERT.CHARGE_OC |= 
             HWALERTFLAGS.CHARGE_OC;
-    SWALERT.DISCHARGE_OC = 
+    SWALERT.DISCHARGE_OC |= 
             HWALERTFLAGS.DISCHARGE_OC;
-    SWALERT.SHORT = 
+    SWALERT.SHORT |= 
             HWALERTFLAGS.SHORT;
-    SWALERT.CHIPSTATE_ERR = 
+    SWALERT.CHIPSTATE_ERR |= 
             HWALERTFLAGS.WDT_OVF |
             HWALERTFLAGS.EXT_PROT |
             HWALERTSTATE.RESET |
@@ -134,31 +192,29 @@ int AFEErrorHandler(int id) {
             HWALERTSTATE.DVDD |
             HWALERTSTATE.EEPROM_CRC_ERR |
             HWALERTSTATE.CLOCK_ABNORMAL;
-    SWALERT.OVERTEMP =
+    SWALERT.OVERTEMP |=
             HWALERTFLAGS.THERM_SD |
             HWALERTFLAGS.TDIE_HI;
-    SWALERT.UNDERTEMP =
+    SWALERT.UNDERTEMP |=
             HWALERTFLAGS.TDIE_LO;
-    SWALERT.COMM_ERR =
+    SWALERT.COMM_ERR |=
             HWALERTFLAGS.SPI_CRC_ERR |
             HWALERTSTATE.SPI_CRC_ERR;
-    SWALERT.DIAG_ERR =
+    SWALERT.DIAG_ERR |=
             HWALERTFLAGS.AUX_OV |
             HWALERTFLAGS.AUX_UV |
             HWALERTFLAGS.LV |
             HWALERTFLAGS.PVDD_UVOV;
-    SWALERT.PACK_OV =
+    SWALERT.PACK_OV |=
             HWALERTFLAGS.PACK_OV;
-    SWALERT.PACK_UV =
+    SWALERT.PACK_UV |=
             HWALERTFLAGS.PACK_UV;
-    SWALERT.CELL_OV =
+    SWALERT.CELL_OV |=
             HWALERTFLAGS.CELL_OV;
-    SWALERT.CELL_UV =
+    SWALERT.CELL_UV |=
             HWALERTFLAGS.CELL_UV;
-    SWALERT.CELL_MISMATCH =
+    SWALERT.CELL_MISMATCH |=
             HWALERTFLAGS.MISMATCH;
-
-    return 0;
 #undef SWALERT
 #undef HWALERTFLAGS
 #undef HWALERTSTATE
@@ -367,6 +423,7 @@ int main(void) {
                     //int altval = g_PackPdoData[curId].hwStatus_bits.SCH_CNT;
                     AFEReadData(curId);
                     AFEErrorHandler(curId);
+                    SwCalcOverCurrent(curId);
                     if(g_PackPdoData[curId].hwBalancerTimer == 0)
                         for (int i=0; i<16; i++)
                             if(g_PackPdoData[curId].cells[i] >= g_PackGeneralConfig[curId]->balancerStartVoltage) {

@@ -47,7 +47,10 @@ static inline void AFEDiagClearLock() {
 }
 
 
-
+/**********************************************************************************************************
+ * Berechne Stromlimits und I2t Wert Vorladung
+ * UNITTEST verfügbar
+ **********************************************************************************************************/
 static void CalculateParametersAndLimits(int id) {
     // Mosfetabhängige Lade/Entladeströme
     float chargeCurrent = PACK_PDO.mosfetStatus_bits.CHARGE && PACK_PDO.mosfetStatus_bits.DISCHARGE
@@ -58,7 +61,7 @@ static void CalculateParametersAndLimits(int id) {
     // Temperaturabhängige Lade/Entladeströme
     float temperature=floatMinVal(PACK_PDO.ntcTemperature,4);
     uint32_t tableId;
-    for(tableId = GENERALCONF_CURRENTTABLE_SIZE - 1; tableId > 0; tableId--) //Temperaturtabelle durchsuchen
+    for(tableId = GENERALCONF_CURRENTTABLE_SIZE - 1; tableId > 0; tableId--)
         if(temperature >= PACK_GENERALCONFIG->currentTableTemperature[tableId])
             break;
     if (chargeCurrent > PACK_GENERALCONFIG->currentTableChargeCurrent[tableId])
@@ -70,10 +73,10 @@ static void CalculateParametersAndLimits(int id) {
     PACK_PDO.availableDischargeCurrent = dischargeCurrent;
 
     // Energiemodell Vorladewiderstand
-    if(PACK_PDO.mosfetStatus_bits.PRECHARGE)
-        PACK_PDO.prechargeResistorI2t += pow(PACK_PDO.current,2.) * CYCLE_TIME_MS * 1e-3;
+    if(PACK_PDO.mosfetStatus_bits.PRECHARGE && !(PACK_PDO.mosfetStatus_bits.CHARGE && PACK_PDO.mosfetStatus_bits.DISCHARGE))
+        PACK_PDO.prechargeResistorI2t += PACK_PDO.current * PACK_PDO.current * CYCLE_TIME_MS * 1e-3;
     else
-        if(PACK_PDO.prechargeResistorI2t > 0){
+        if(PACK_PDO.prechargeResistorI2t > 0) {
             PACK_PDO.prechargeResistorI2t -= PACK_GENERALCONFIG->prechargeResistorI2tDecay;
             if(PACK_PDO.prechargeResistorI2t < 0)
                 PACK_PDO.prechargeResistorI2t = 0;
@@ -136,8 +139,13 @@ static void ErrorHandler(int id) {
         PACK_PDO_SWALERTFLAG_BITS.PRECHARGE_FAIL = 1;
 }
 
+/**********************************************************************************************************
+ * xxx
+ * UNITTEST verfügbar
+ **********************************************************************************************************/
 static void MosControl(int id) {
     uint16_t mosVal=0;
+
     uint8_t errorAll = 
         PACK_PDO_SWALERTFLAG_BITS.SHORT ||
         PACK_PDO_SWALERTFLAG_BITS.CHIPSTATE_ERR ||
@@ -171,7 +179,7 @@ static void MosControl(int id) {
     
     if(PACK_SDO.ChargeEnable && !(errorAll || errorCharge))
         mosVal |= (1 << 1);
-
+    spi_AFEWriteRegister(0x13,mosVal);
 }
 
 static void AFEWriteUser(int id) {

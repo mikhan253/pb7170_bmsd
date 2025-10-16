@@ -19,14 +19,22 @@ PACK_USERCONF_t* g_PackUserConfig[MAX_BATTERY_PACKS];
 PACK_GENERALCONF_t* g_PackGeneralConfig[MAX_BATTERY_PACKS];
 PACK_CALIBRATION_t* g_PackCalibration[MAX_BATTERY_PACKS];
 
-int spi_SelectDevice(uint_fast8_t device)
-{return 0;};
-int spi_Init(const char *spiDevice, uint32_t speed, uint8_t mode, uint8_t bits, const char *gpioDevice, const unsigned int *gpioPins, const unsigned int gpioNrPins)
-{return 0;};
-int spi_AFEReadRegister(uint8_t addr, uint16_t* output, uint_fast8_t count)
-{return 0;};
-int spi_AFEWriteRegister(uint8_t addr, uint16_t data)
-{return 0;};
+uint16_t SpiReg[0xff];
+
+int spi_SelectDevice(uint_fast8_t device) {
+    return 0;
+};
+int spi_Init(const char *spiDevice, uint32_t speed, uint8_t mode, uint8_t bits, const char *gpioDevice, const unsigned int *gpioPins, const unsigned int gpioNrPins) {
+    return 0;
+};
+int spi_AFEReadRegister(uint8_t addr, uint16_t* output, uint_fast8_t count) {
+    *output = SpiReg[addr];
+    return 0;
+};
+int spi_AFEWriteRegister(uint8_t addr, uint16_t data) {
+    SpiReg[addr] = data;
+    return 0;
+};
 
 
 #include "bms.c"
@@ -34,16 +42,14 @@ int spi_AFEWriteRegister(uint8_t addr, uint16_t data)
 int main() {
     uint32_t id=0;
     uint32_t errors=0;
-    printf("UNIT FEST für BMS.C\n");
+    printf("--- UNIT FEST für BMS.C ---\n");
     g_PackPdoData = PackPdoData;
+    g_PackSdoData = PackSdoData;
     g_PackGeneralConfig[id] = &PackGeneralConfig[id];
 
 #define SET_NTC(x) for(int i=0;i<4;i++) PACK_PDO.ntcTemperature[i]=x;
 #define CT_TEMP 
-
-
-
-
+/*********************************************************************************************/
 printf("CalculateParametersAndLimits\n");
     PACK_GENERALCONFIG->currentTableTemperature[0] = -30;
     PACK_GENERALCONFIG->currentTableTemperature[1] = -20;
@@ -86,6 +92,7 @@ printf("CalculateParametersAndLimits\n");
             errors++; \
         }
 
+    printf(" * Temperaturtabelle prüfen, Mosfets ein\n");
     TESTCASE( 1,  -40.0f ,     0.0f ,       0.0f)
     TESTCASE( 2,  -30.0f ,     0.0f ,       0.0f)
     TESTCASE( 3,  -20.1f ,     0.0f ,       0.0f)
@@ -96,6 +103,73 @@ printf("CalculateParametersAndLimits\n");
     TESTCASE( 8,   59.9f ,   157.0f ,    -157.0f)
     TESTCASE( 9,   60.0f ,     0.0f ,       0.0f)
     TESTCASE(10,   90.0f ,     0.0f ,       0.0f)
+    printf(" * Temperaturtabelle prüfen, Mosfets ein, BMS Limit\n");
+    PACK_GENERALCONFIG->bmsMaxCurrent = 125;
+    TESTCASE( 1,  -40.0f ,     0.0f ,       0.0f)
+    TESTCASE( 2,  -19.9f ,     0.0f ,    -125.0f)
+    TESTCASE( 3,    0.0f ,    15.7f ,    -125.0f)
+    TESTCASE( 4,   59.9f ,   125.0f ,    -125.0f)
+    TESTCASE( 5,   60.0f ,     0.0f ,       0.0f)
+    printf(" * Temperaturtabelle prüfen, Mosfets aus\n");
+    PACK_PDO.mosfetStatus_bits.CHARGE = 1;
+    PACK_PDO.mosfetStatus_bits.DISCHARGE = 0;
+    TESTCASE( 1,  -40.0f ,     0.0f ,       0.0f)
+    TESTCASE( 2,  -19.9f ,     0.0f ,     -50.0f)
+    TESTCASE( 3,    0.0f ,    15.7f ,     -50.0f)
+    TESTCASE( 4,   59.9f ,    50.0f ,     -50.0f)
+    TESTCASE( 5,   60.0f ,     0.0f ,       0.0f)
+    PACK_PDO.mosfetStatus_bits.CHARGE = 0;
+    PACK_PDO.mosfetStatus_bits.DISCHARGE = 1;
+    TESTCASE( 6,  -40.0f ,     0.0f ,       0.0f)
+    TESTCASE( 7,  -19.9f ,     0.0f ,     -50.0f)
+    TESTCASE( 8,    0.0f ,    15.7f ,     -50.0f)
+    TESTCASE( 9,   59.9f ,    50.0f ,     -50.0f)
+    TESTCASE(10,   60.0f ,     0.0f ,       0.0f)
+    PACK_PDO.mosfetStatus_bits.CHARGE = 0;
+    PACK_PDO.mosfetStatus_bits.DISCHARGE = 0;
+    TESTCASE(11,  -40.0f ,     0.0f ,       0.0f)
+    TESTCASE(12,  -19.9f ,     0.0f ,     -50.0f)
+    TESTCASE(13,    0.0f ,    15.7f ,     -50.0f)
+    TESTCASE(14,   59.9f ,    50.0f ,     -50.0f)
+    TESTCASE(15,   60.0f ,     0.0f ,       0.0f)
+#undef TESTCASE
 
-    return 0;
+    PACK_GENERALCONFIG->prechargeResistorI2tDecay=0.1f;
+    PACK_PDO.current = 0;
+#define TESTCASE(nr, set1, expect1) \
+        PACK_PDO.current = set1; \
+        CalculateParametersAndLimits(id); \
+        if( (PACK_PDO.prechargeResistorI2t != expect1) ) { \
+            printf("   TC%02u FAIL: current=%f\n              prechargeResistorI2t=%f (expect %f)\n",nr, PACK_PDO.current, PACK_PDO.prechargeResistorI2t, expect1); \
+            errors++; \
+        }
+    printf(" * I2t Vorladewiderstand, Precharge nicht ein\n");
+    TESTCASE( 1,    0.0f ,     0.0f)
+    TESTCASE( 2,   10.0f ,     0.0f)
+    TESTCASE( 3,  -10.0f ,     0.0f)
+    printf(" * I2t Vorladewiderstand, Precharge ein\n");
+    PACK_PDO.mosfetStatus_bits.PRECHARGE = 1;
+    TESTCASE( 1,    0.0f ,     0.0f)
+    TESTCASE( 2,   10.0f ,     25.200001f)
+    TESTCASE( 3,  -10.0f ,     50.400002f)
+    TESTCASE( 4,    0.0f ,     50.400002f)
+    printf(" * I2t Vorladewiderstand, Precharge aus\n");
+    PACK_PDO.mosfetStatus_bits.PRECHARGE = 0;
+    TESTCASE( 1,    0.0f ,     50.300003f)
+    TESTCASE( 2,    0.0f ,     50.200005f)
+    TESTCASE( 3,    0.0f ,     50.100006f)
+    printf(" * I2t Vorladewiderstand, Alle Mosfets ein\n");
+    PACK_PDO.mosfetStatus_bits.PRECHARGE = 1;
+    PACK_PDO.mosfetStatus_bits.CHARGE = 1;
+    PACK_PDO.mosfetStatus_bits.DISCHARGE = 1;
+    TESTCASE( 1,   10.0f ,     50.000008f)
+    TESTCASE( 2,  -10.0f ,     49.900009f)
+#undef TESTCASE
+/*********************************************************************************************/
+    printf("MosControl\n");
+    MosControl(id);
+
+/*********************************************************************************************/
+    printf("%u Fehler\n",errors);
+    return (errors != 0);
 }

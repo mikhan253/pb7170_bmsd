@@ -167,8 +167,29 @@ printf("CalculateParametersAndLimits\n");
 #undef TESTCASE
 /*********************************************************************************************/
     printf("MosControl\n");
-    MosControl(id);
-
+#define TESTCASE(nr, set1, set2, set3, set4, set5, set6, set7, set8, expect1) \
+        PACK_SDO.ChargeEnable = set1; \
+        PACK_SDO.DischargeEnable = set2; \
+        g_PackPdoData[id].swAlertFlags = set3; \
+        PACK_PDO.mosfetStatus_bits.CHARGE = set4; \
+        PACK_PDO.mosfetStatus_bits.DISCHARGE = set5; \
+        PACK_PDO.mosfetStatus_bits.PRECHARGE = set6; \
+        PACK_PDO.voltage = set7; \
+        totViltage = set8; \
+        MosControl(id); \
+        if( (SpiReg[0x13] != expect1) ) { \
+            printf("   TC%02u FAIL: ChargeEnable=%u\n",nr,set1); \
+            printf("              DischargeEnable=%u\n",set2); \
+            printf("              swAlertFlags=%u\n",set3); \
+            PACK_PDO.mosfetStatus.Charge \
+            printf("              MOS_TIM=%u (expect %u)\n",SpiReg[0x13],expect1); \
+            errors++; \
+        }
+    printf(" * Alles Aus, kein Fehler\n");
+    TESTCASE(1, 0, 0, 0, 0, 0, 0, 0, 0, 0)
+    printf(" * Alles Aus, kein Fehler\n");
+    //TESTCASE(1, 1, 0, 0, 0)
+#undef TESTCASE
 /*********************************************************************************************/
     printf("%u Fehler\n",errors);
     return (errors != 0);

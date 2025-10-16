@@ -23,6 +23,9 @@ CFLAGS += -mcpu=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard -ffast-math -ftree-v
 CC ?= $(CROSS_COMPILE)gcc
 TARGET = bmsd
 
+UNITTESTFLAGS := -fsanitize=address -fsanitize=undefined -fsanitize=leak
+UNITTESTFLAGS += -fsanitize=pointer-subtract -fsanitize=pointer-compare -fsanitize=undefined -fsanitize=bounds -fsanitize=bounds-strict
+UNITTESTFLAGS += -fstack-protector-all -fstack-clash-protection -D_FORTIFY_SOURCE=2 -ftrapv
 
 all:
 	$(CC) $(CFLAGS) -o $(TARGET) $(SRC)
@@ -40,7 +43,7 @@ push:
 	tar czf - bmsd conf webserver | ssh $(PUSH_MACHINE) "tar xzf - -C /tmp"
 
 unittest:
-	@gcc -o unittest-$(TARGET) -lm unit-test.c
+	@gcc -o unittest-$(TARGET) -O2 $(UNITTESTFLAGS) -lm unit-test.c
 	@./unittest-$(TARGET)
 	@rm unittest-$(TARGET)
 

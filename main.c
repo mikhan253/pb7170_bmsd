@@ -8,9 +8,10 @@
 #include <time.h>
 #endif
 
+#include "globalconst.h"
 #include "tasksetup.h"
 #include "spi.h"
-
+#include "bms.h"
 #include "dataobjects.h"
 
 /*int CyclicDelta(int actualVal, int previousVal) {
@@ -38,7 +39,7 @@ int main(void) {
     uint64_t timerExpirations;
 
 
-    if (tas_Init(255)) { //etwas größer als 250ms, um immer einen neuen wert zu bekommen
+    if (tas_Init(CYCLE_TIME_MS)) { //etwas größer als 250ms, um immer einen neuen wert zu bekommen
         printf("Failed to set up task\n");
         return 1;
     }
@@ -67,6 +68,7 @@ int main(void) {
             if ((g_packEnabled & (1 << curId)) == 0)
                 continue;
             spi_SelectDevice(curId);
+            bms_CyclicTask(curId);
             //CYCLE_TASK
 
         }

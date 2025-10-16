@@ -1,0 +1,1 @@
+#define CYCLE_TIME_MS 252

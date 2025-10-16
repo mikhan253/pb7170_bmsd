@@ -39,4 +39,8 @@ clean:
 push:
 	tar czf - bmsd conf webserver | ssh $(PUSH_MACHINE) "tar xzf - -C /tmp"
 
+unittest:
+	gcc -o unittest-$(TARGET) -lm unit-test.c
+	./unittest-$(TARGET)
+
 .PHONY: all clean

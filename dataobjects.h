@@ -2,6 +2,7 @@
 #define _DATAOBJECTS_H_
 
 #define MAX_BATTERY_PACKS 10
+#define GENERALCONF_CURRENTTABLE_SIZE 10
 
 typedef enum {
     AFE_STATE_WAIT_INIT = 0,
@@ -19,6 +20,16 @@ typedef enum {
     AFE_STATE_DISABLED,
     AFE_STATE_COUNT  // Anzahl der States (letztes Element)
 } EStateMachine_t;
+
+typedef enum {
+    MOS_STATE_DISCONNECTED = 0,
+    MOS_STATE_CHARGE_ONLY,
+    MOS_STATE_DISCHARGE_ONLY,
+    MOS_STATE_PRECHARGE,
+    MOS_STATE_PRECHARGE_WAIT,
+    MOS_STATE_CONNECTED,
+    MOS_STATE_COUNT  // Anzahl der States (letztes Element)
+} EStateMachineMos_t;
 
 typedef struct {
     /***************** Allgemeine Informationen *****************/
@@ -161,6 +172,8 @@ typedef struct {
             uint32_t DISCHARGE : 1;
         } mosfetStatus_bits;
     };
+    EStateMachineMos_t stateMosfetControl;
+    float prechargeResistorI2t;
 
     float current;
     float fastCurrent;
@@ -200,10 +213,12 @@ typedef struct {
     float balancerDiffVoltage;
     float cadcCurrentFactor;
     float vadcCurrentFactor;
+    float prechargeResistorMaxI2t;
+    float prechargeResistorI2tDecay;
     float ntcPolynom[11];
-    float currentTableTemperature[10];
-    float currentTableChargeCurrent[10];
-    float currentTableDischargeCurrent[10];
+    float currentTableTemperature[GENERALCONF_CURRENTTABLE_SIZE];
+    float currentTableChargeCurrent[GENERALCONF_CURRENTTABLE_SIZE];
+    float currentTableDischargeCurrent[GENERALCONF_CURRENTTABLE_SIZE];
     float ocvTableSOC[11];
     float ocvTableVoltage[11];
     

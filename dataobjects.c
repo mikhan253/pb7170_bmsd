@@ -199,7 +199,6 @@ void dob_LoadPackConfigs(void)
         PrintLoadState(filename, duplicate_of);
         g_PackPdoData[i].id = i + 1;
         g_packEnabled |= (1 << i);
-        g_PackPdoData[i].stateMachine = AFE_STATE_WAIT_INIT;
     }
 
     for (int i = 0; i < MAX_BATTERY_PACKS; i++)

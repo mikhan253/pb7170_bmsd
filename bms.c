@@ -3,6 +3,7 @@
 #include <float.h>
 #include <stdio.h>
 
+#include "globalconst.h"
 #include "spi.h"
 #include "dataobjects.h"
 #include "aux.c"
@@ -14,16 +15,8 @@
 #define PACK_PDO_HWALERTSTATE_BITS g_PackPdoData[id].hwAlertState_bits
 #define PACK_SDO g_PackSdoData[id]
 
-uint32_t diagLock = 0;
-uint16_t diagData[16 * 3];
-
-static void CalcOverCurrent(int id);
-static void ErrorHandler(int id);
-static uint32_t AFEInit(int id);
-static void AFEReadData(int id);
-static uint32_t AFEWireDiag(uint16_t *data);
-static uint32_t AFEBalancer (int id);
-static uint32_t AFECheckPowerupComplete();
+static uint32_t diagLock = 0;
+static uint16_t diagData[16 * 3];
 
 static inline void AFESafeMode() {
     spi_AFEWriteRegister(0x13, 0); // Alle MOSFETs aus
@@ -52,6 +45,249 @@ static inline void AFEDiagClearLock() {
     spi_AFEWriteRegister(0x52,0x0000);
     spi_AFEWriteRegister(0x43,0x0);
 }
+
+
+
+static void CalculateParametersAndLimits(int id) {
+    // Mosfetabhängige Lade/Entladeströme
+    float chargeCurrent = PACK_PDO.mosfetStatus_bits.CHARGE && PACK_PDO.mosfetStatus_bits.DISCHARGE
+        ? PACK_GENERALCONFIG->bmsMaxCurrent
+        : PACK_GENERALCONFIG->bmsMaxCurrentReduced;
+    float dischargeCurrent = -chargeCurrent;
+
+    // Temperaturabhängige Lade/Entladeströme
+    float temperature=floatMinVal(PACK_PDO.ntcTemperature,4);
+    uint32_t tableId;
+    for(tableId = GENERALCONF_CURRENTTABLE_SIZE - 1; tableId > 0; tableId--) //Temperaturtabelle durchsuchen
+        if(temperature >= PACK_GENERALCONFIG->currentTableTemperature[tableId])
+            break;
+    if (chargeCurrent > PACK_GENERALCONFIG->currentTableChargeCurrent[tableId])
+        chargeCurrent = PACK_GENERALCONFIG->currentTableChargeCurrent[tableId];
+    if (dischargeCurrent < PACK_GENERALCONFIG->currentTableDischargeCurrent[tableId])
+        dischargeCurrent = PACK_GENERALCONFIG->currentTableDischargeCurrent[tableId];
+
+    PACK_PDO.availableChargeCurrent = chargeCurrent;
+    PACK_PDO.availableDischargeCurrent = dischargeCurrent;
+
+    // Energiemodell Vorladewiderstand
+    if(PACK_PDO.mosfetStatus_bits.PRECHARGE)
+        PACK_PDO.prechargeResistorI2t += pow(PACK_PDO.current,2.) * CYCLE_TIME_MS * 1e-3;
+    else
+        if(PACK_PDO.prechargeResistorI2t > 0){
+            PACK_PDO.prechargeResistorI2t -= PACK_GENERALCONFIG->prechargeResistorI2tDecay;
+            if(PACK_PDO.prechargeResistorI2t < 0)
+                PACK_PDO.prechargeResistorI2t = 0;
+        }
+}
+
+static void ErrorHandler(int id) {
+    // HW Teil
+    PACK_PDO_SWALERTFLAG_BITS.HW_CHARGE_OC = 
+            PACK_PDO_HWALERTFLAG_BITS.CHARGE_OC;
+    PACK_PDO_SWALERTFLAG_BITS.HW_DISCHARGE_OC = 
+            PACK_PDO_HWALERTFLAG_BITS.DISCHARGE_OC;
+    PACK_PDO_SWALERTFLAG_BITS.SHORT |= 
+            PACK_PDO_HWALERTFLAG_BITS.SHORT;
+    PACK_PDO_SWALERTFLAG_BITS.CHIPSTATE_ERR |= 
+            PACK_PDO_HWALERTFLAG_BITS.WDT_OVF |
+            PACK_PDO_HWALERTFLAG_BITS.EXT_PROT |
+            PACK_PDO_HWALERTSTATE_BITS.RESET |
+            PACK_PDO_HWALERTSTATE_BITS.SLEEP |
+            PACK_PDO_HWALERTSTATE_BITS.VREF |
+            PACK_PDO_HWALERTSTATE_BITS.LVMUX |
+            PACK_PDO_HWALERTSTATE_BITS.AVDD |
+            PACK_PDO_HWALERTSTATE_BITS.DVDD |
+            PACK_PDO_HWALERTSTATE_BITS.EEPROM_CRC_ERR |
+            PACK_PDO_HWALERTSTATE_BITS.CLOCK_ABNORMAL;
+    PACK_PDO_SWALERTFLAG_BITS.HW_OVERTEMP |=
+            PACK_PDO_HWALERTFLAG_BITS.THERM_SD |
+            PACK_PDO_HWALERTFLAG_BITS.TDIE_HI;
+    PACK_PDO_SWALERTFLAG_BITS.HW_UNDERTEMP |=
+            PACK_PDO_HWALERTFLAG_BITS.TDIE_LO;
+    PACK_PDO_SWALERTFLAG_BITS.COMM_ERR |=
+            PACK_PDO_HWALERTFLAG_BITS.SPI_CRC_ERR |
+            PACK_PDO_HWALERTSTATE_BITS.SPI_CRC_ERR;
+    PACK_PDO_SWALERTFLAG_BITS.DIAG_ERR |=
+            PACK_PDO_HWALERTFLAG_BITS.AUX_OV |
+            PACK_PDO_HWALERTFLAG_BITS.AUX_UV |
+            PACK_PDO_HWALERTFLAG_BITS.LV |
+            PACK_PDO_HWALERTFLAG_BITS.PVDD_UVOV;
+    PACK_PDO_SWALERTFLAG_BITS.PACK_OV |=
+            PACK_PDO_HWALERTFLAG_BITS.PACK_OV;
+    PACK_PDO_SWALERTFLAG_BITS.PACK_UV |=
+            PACK_PDO_HWALERTFLAG_BITS.PACK_UV;
+    PACK_PDO_SWALERTFLAG_BITS.CELL_OV |=
+            PACK_PDO_HWALERTFLAG_BITS.CELL_OV;
+    PACK_PDO_SWALERTFLAG_BITS.CELL_UV |=
+            PACK_PDO_HWALERTFLAG_BITS.CELL_UV;
+    PACK_PDO_SWALERTFLAG_BITS.CELL_MISMATCH |=
+            PACK_PDO_HWALERTFLAG_BITS.MISMATCH;
+
+    // SW Teil
+    if(PACK_PDO.current > PACK_PDO.availableChargeCurrent)
+        PACK_PDO_SWALERTFLAG_BITS.SW_CHARGE_OC = 1;
+    if(PACK_PDO.current < PACK_PDO.availableDischargeCurrent)
+        PACK_PDO_SWALERTFLAG_BITS.SW_DISCHARGE_OC = 1;
+    if(floatMaxVal(PACK_PDO.ntcTemperature,4) > PACK_GENERALCONFIG->currentTableTemperature[9])
+        PACK_PDO_SWALERTFLAG_BITS.PACK_OVERTEMP = 1;
+    if(floatMinVal(PACK_PDO.ntcTemperature,4) < PACK_GENERALCONFIG->currentTableTemperature[0])
+        PACK_PDO_SWALERTFLAG_BITS.PACK_UNDERTEMP = 1;
+    if(PACK_PDO.prechargeResistorI2t > PACK_GENERALCONFIG->prechargeResistorMaxI2t)
+        PACK_PDO_SWALERTFLAG_BITS.PRECHARGE_FAIL = 1;
+}
+
+static void MosControl(int id) {
+    uint16_t mosVal=0;
+    uint8_t errorAll = 
+        PACK_PDO_SWALERTFLAG_BITS.SHORT ||
+        PACK_PDO_SWALERTFLAG_BITS.CHIPSTATE_ERR ||
+        PACK_PDO_SWALERTFLAG_BITS.HW_OVERTEMP ||
+        PACK_PDO_SWALERTFLAG_BITS.HW_UNDERTEMP ||
+        PACK_PDO_SWALERTFLAG_BITS.PACK_OVERTEMP ||
+        PACK_PDO_SWALERTFLAG_BITS.PACK_UNDERTEMP ||
+        PACK_PDO_SWALERTFLAG_BITS.TEMP_MISMATCH ||
+        PACK_PDO_SWALERTFLAG_BITS.COMM_ERR ||
+        PACK_PDO_SWALERTFLAG_BITS.DIAG_ERR ||
+        PACK_PDO_SWALERTFLAG_BITS.CELL_MISMATCH ||
+        PACK_PDO_SWALERTFLAG_BITS.PRECHARGE_FAIL ||
+        PACK_PDO_SWALERTFLAG_BITS.CURRENT_ABNORMAL;
+    uint8_t errorCharge =
+        PACK_PDO_SWALERTFLAG_BITS.HW_CHARGE_OC ||
+        PACK_PDO_SWALERTFLAG_BITS.SW_CHARGE_OC ||
+        PACK_PDO_SWALERTFLAG_BITS.PACK_OV ||
+        PACK_PDO_SWALERTFLAG_BITS.CELL_OV;
+    uint8_t errorDischarge =
+        PACK_PDO_SWALERTFLAG_BITS.HW_DISCHARGE_OC ||
+        PACK_PDO_SWALERTFLAG_BITS.SW_DISCHARGE_OC ||
+        PACK_PDO_SWALERTFLAG_BITS.PACK_UV ||
+        PACK_PDO_SWALERTFLAG_BITS.CELL_UV;
+    
+    if( ((PACK_SDO.DischargeEnable && !(errorAll || errorDischarge)) == 1) &&
+        (PACK_PDO.mosfetStatus_bits.DISCHARGE == 0)) //Wechsel von Discharge off -> on erfordert Precharge
+        mosVal |= (1 << 2);
+    else
+        if(PACK_SDO.DischargeEnable && !(errorAll || errorDischarge))
+            mosVal |= (1 << 0);
+    
+    if(PACK_SDO.ChargeEnable && !(errorAll || errorCharge))
+        mosVal |= (1 << 1);
+
+}
+
+static void AFEWriteUser(int id) {
+    spi_AFEWriteRegister(0x45,0x95); // USER Unlock
+    uint32_t i=0;
+    while (g_PackUserConfig[id][i].address > 0) {
+        spi_AFEWriteRegister(
+            g_PackUserConfig[id][i].address,
+            g_PackUserConfig[id][i].data);
+        i++;
+    }
+    spi_AFEWriteRegister(0x45,0x95); // USER Unlock
+}
+
+static uint32_t AFEVerifyUser(int id) {
+    uint32_t i=0;
+    while (g_PackUserConfig[id][i].address > 0) {
+        uint32_t start = i;
+        uint32_t len = 1;
+
+        // Suche, wie viele aufeinanderfolgende Register wir haben (max. 32)
+        while (g_PackUserConfig[id][start + len].address ==
+               g_PackUserConfig[id][start + len - 1].address + 1 &&
+               len < 32 &&
+               g_PackUserConfig[id][start + len].address > 0)
+            len++;
+
+        // Lese den ganzen Block auf einmal
+        uint16_t readback[32]; // max Blockgröße
+        spi_AFEReadRegister(
+                g_PackUserConfig[id][start].address,
+                readback,
+                len
+            );
+
+        // Vergleiche jedes Register im Block
+        for (uint32_t j = 0; j < len; j++)
+            if (g_PackUserConfig[id][start + j].data != readback[j])
+                return 1;
+
+        i += len; // Nächster Block
+    }
+    return 0;
+}
+
+static uint32_t AFEInit(int id) {
+    AFEWriteUser(id);
+    if(AFEVerifyUser(id))
+        return 1;
+    spi_AFEWriteRegister(0x05,0x4000); //Clear RESET Flag
+    spi_AFEWriteRegister(0x0d,31); //Setup Balancer
+    return 0;
+}
+
+static void AFEReadData(int id) {
+    uint16_t data[28];
+
+    spi_AFEReadRegister(0x01, data, 16);
+    PACK_PDO.hwStatus = data[0];
+    PACK_PDO.hwAlertFlags = (data[2] << 16) | data[1];
+    PACK_PDO.hwAlertState = (data[5] << 16) | data[4];
+    PACK_PDO.hwAlertCellUnderOvervoltage = (data[7] << 16) | data[6];
+    PACK_PDO.hwAlertAux = data[9];
+    PACK_PDO.hwBalancerTimer = data[14];
+    PACK_PDO.hwBalancerStatus = data[15];
+
+    spi_AFEReadRegister(0x84, data, 28);
+    PACK_PDO.current = (float)((int16_t)data[0]) * PACK_GENERALCONFIG->cadcCurrentFactor;
+    PACK_PDO.voltage = (float)data[1] * 1.6e-3;
+    PACK_PDO.pvddVoltage = (float)data[2] * 2.5e-3;
+    for(int i=0; i < 16; i++)
+        PACK_PDO.cells[i] = (float)data[3 + i] * 100e-6;
+    for(int i=0; i < 4; i++)
+        PACK_PDO.ntcTemperature[i] = NtcToTemperature((float)data[20 + i], PACK_GENERALCONFIG->ntcPolynom, 11);
+    PACK_PDO.dieTemperature = (float)(25437 - data[26]) / 59.17 - 64.5;
+    PACK_PDO.fastCurrent = (float)(data[27] & 0x7fff) * PACK_GENERALCONFIG->vadcCurrentFactor;
+    if (data[27] & 0x8000)
+        PACK_PDO.fastCurrent = -PACK_PDO.fastCurrent;
+}
+
+static uint32_t AFEWireDiag(uint16_t *data)
+{
+#define KABELBRUCH_MAX_DELTA 200
+    for(int i=16; i<=32;i+=16)
+        for(int j=0; j<16;j++)
+        {
+            int32_t delta;
+            delta = data[j] - data[i+j];
+            if(delta < 0)
+                delta = -delta;
+            if((delta >= KABELBRUCH_MAX_DELTA))
+                return 1; //Kabelbruch erkannt
+        }
+    return 0;
+}
+
+static uint32_t AFEBalancer (int id) {
+    float avg_vcell=floatAvgVal(PACK_PDO.cells,16);
+    
+    uint32_t new_balance = 0;
+    for(int i=0; i<16; i++)
+        if((PACK_PDO.cells[i] - avg_vcell) > PACK_GENERALCONFIG->balancerDiffVoltage)
+            new_balance |= (1 << i);
+
+    spi_AFEWriteRegister(0x0c,new_balance);
+    spi_AFEWriteRegister(0x0f,40); //40 * 0,25 -> 10sek
+
+    return (new_balance>0);
+}
+
+static uint32_t AFECheckPowerupComplete() {
+    uint16_t data;
+    spi_AFEReadRegister(0x00, &data, 1);
+    return data == 0x6000; /* TOP_STATUS muss auf Power-up Complete sein */
+}
+
 
 void bms_CyclicTask(uint32_t id) {
     switch(PACK_PDO.stateMachine)
@@ -157,7 +393,7 @@ void bms_CyclicTask(uint32_t id) {
             }
         case AFE_STATE_RUN:
             AFEReadData(id);
-            CalcOverCurrent(id);
+            CalculateParametersAndLimits(id);
             ErrorHandler(id);
             if(PACK_PDO.hwBalancerTimer == 0)
                 for (int i=0; i<16; i++)
@@ -171,234 +407,4 @@ void bms_CyclicTask(uint32_t id) {
         default:
             break;
     }
-}
-
-static void CalcOverCurrent(int id) {
-    float chargeCurrent;
-    float dischargeCurrent;
-    float temperature=floatMinVal(PACK_PDO.ntcTemperature,4);
-    uint32_t tableId;
-
-    if(PACK_PDO.mosfetStatus_bits.CHARGE && PACK_PDO.mosfetStatus_bits.DISCHARGE) { //Beide Mosfets ein?
-        chargeCurrent = PACK_GENERALCONFIG->bmsMaxCurrent;
-        dischargeCurrent = -PACK_GENERALCONFIG->bmsMaxCurrent;
-    } else {
-        chargeCurrent = PACK_GENERALCONFIG->bmsMaxCurrentReduced;
-        dischargeCurrent = -PACK_GENERALCONFIG->bmsMaxCurrentReduced;
-    }
-
-    for(tableId = 10; tableId >= 0; --tableId) //Temperaturtabelle durchsuchen
-        if(temperature >= PACK_GENERALCONFIG->currentTableTemperature[tableId])
-            break;
-
-    if (chargeCurrent > PACK_GENERALCONFIG->currentTableChargeCurrent[tableId])
-        chargeCurrent = PACK_GENERALCONFIG->currentTableChargeCurrent[tableId];
-    if (dischargeCurrent < PACK_GENERALCONFIG->currentTableDischargeCurrent[tableId])
-        dischargeCurrent = PACK_GENERALCONFIG->currentTableDischargeCurrent[tableId];
-
-    PACK_PDO.availableChargeCurrent = chargeCurrent;
-    PACK_PDO.availableDischargeCurrent = dischargeCurrent;
-}
-
-static void ErrorHandler(int id) {
-    // HW Teil
-    PACK_PDO_SWALERTFLAG_BITS.HW_CHARGE_OC = 
-            PACK_PDO_HWALERTFLAG_BITS.CHARGE_OC;
-    PACK_PDO_SWALERTFLAG_BITS.HW_DISCHARGE_OC = 
-            PACK_PDO_HWALERTFLAG_BITS.DISCHARGE_OC;
-    PACK_PDO_SWALERTFLAG_BITS.SHORT |= 
-            PACK_PDO_HWALERTFLAG_BITS.SHORT;
-    PACK_PDO_SWALERTFLAG_BITS.CHIPSTATE_ERR |= 
-            PACK_PDO_HWALERTFLAG_BITS.WDT_OVF |
-            PACK_PDO_HWALERTFLAG_BITS.EXT_PROT |
-            PACK_PDO_HWALERTSTATE_BITS.RESET |
-            PACK_PDO_HWALERTSTATE_BITS.SLEEP |
-            PACK_PDO_HWALERTSTATE_BITS.VREF |
-            PACK_PDO_HWALERTSTATE_BITS.LVMUX |
-            PACK_PDO_HWALERTSTATE_BITS.AVDD |
-            PACK_PDO_HWALERTSTATE_BITS.DVDD |
-            PACK_PDO_HWALERTSTATE_BITS.EEPROM_CRC_ERR |
-            PACK_PDO_HWALERTSTATE_BITS.CLOCK_ABNORMAL;
-    PACK_PDO_SWALERTFLAG_BITS.HW_OVERTEMP |=
-            PACK_PDO_HWALERTFLAG_BITS.THERM_SD |
-            PACK_PDO_HWALERTFLAG_BITS.TDIE_HI;
-    PACK_PDO_SWALERTFLAG_BITS.HW_UNDERTEMP |=
-            PACK_PDO_HWALERTFLAG_BITS.TDIE_LO;
-    PACK_PDO_SWALERTFLAG_BITS.COMM_ERR |=
-            PACK_PDO_HWALERTFLAG_BITS.SPI_CRC_ERR |
-            PACK_PDO_HWALERTSTATE_BITS.SPI_CRC_ERR;
-    PACK_PDO_SWALERTFLAG_BITS.DIAG_ERR |=
-            PACK_PDO_HWALERTFLAG_BITS.AUX_OV |
-            PACK_PDO_HWALERTFLAG_BITS.AUX_UV |
-            PACK_PDO_HWALERTFLAG_BITS.LV |
-            PACK_PDO_HWALERTFLAG_BITS.PVDD_UVOV;
-    PACK_PDO_SWALERTFLAG_BITS.PACK_OV |=
-            PACK_PDO_HWALERTFLAG_BITS.PACK_OV;
-    PACK_PDO_SWALERTFLAG_BITS.PACK_UV |=
-            PACK_PDO_HWALERTFLAG_BITS.PACK_UV;
-    PACK_PDO_SWALERTFLAG_BITS.CELL_OV |=
-            PACK_PDO_HWALERTFLAG_BITS.CELL_OV;
-    PACK_PDO_SWALERTFLAG_BITS.CELL_UV |=
-            PACK_PDO_HWALERTFLAG_BITS.CELL_UV;
-    PACK_PDO_SWALERTFLAG_BITS.CELL_MISMATCH |=
-            PACK_PDO_HWALERTFLAG_BITS.MISMATCH;
-
-    // SW Teil
-    if(PACK_PDO.current > PACK_PDO.availableChargeCurrent)
-        PACK_PDO_SWALERTFLAG_BITS.SW_CHARGE_OC = 1;
-    if(PACK_PDO.current < PACK_PDO.availableDischargeCurrent)
-        PACK_PDO_SWALERTFLAG_BITS.SW_DISCHARGE_OC = 1;
-    if(floatMaxVal(PACK_PDO.ntcTemperature,4) > PACK_GENERALCONFIG->currentTableTemperature[9])
-        PACK_PDO_SWALERTFLAG_BITS.PACK_OVERTEMP = 1;
-    if(floatMinVal(PACK_PDO.ntcTemperature,4) < PACK_GENERALCONFIG->currentTableTemperature[0])
-        PACK_PDO_SWALERTFLAG_BITS.PACK_UNDERTEMP = 1;
-}
-
-static void MosControl(int id) {
-    uint16_t mosVal=0;
-
-    PrechargeCnt = xx; //max 1 sek 80j, dann 25sek pause
-
-    if(Precharge)
-        mosVal |= (1 << 2);
-    if(PACK_SDO.ChargeEnable && (PACK_PDO_SWALERTFLAG_BITS.SW_CHARGE_OC...))
-        mosVal |= (1 << 1);
-    if( PACK_SDO.DischargeEnable && 
-        !PACK_PDO_SWALERTFLAG_BITS.HW_DISCHARGE_OC &&
-        !PACK_PDO_SWALERTFLAG_BITS.SHORT &&
-
-            uint32_t HW_DISCHARGE_OC : 1;
-            uint32_t SW_DISCHARGE_OC : 1;
-            uint32_t SHORT : 1;
-            uint32_t CHIPSTATE_ERR : 1;
-            uint32_t HW_OVERTEMP : 1;
-            uint32_t HW_UNDERTEMP : 1;
-            uint32_t PACK_OVERTEMP : 1;
-            uint32_t PACK_UNDERTEMP : 1;
-            uint32_t TEMP_MISMATCH : 1;
-            uint32_t COMM_ERR : 1;
-            uint32_t DIAG_ERR : 1;
-            uint32_t PACK_UV : 1;
-            uint32_t CELL_UV : 1;
-            uint32_t PRECHARGE_FAIL : 1;
-            uint32_t CURRENT_ABNORMAL : 1;        
-        
-        mosVal |= (1 << 0);
-    
-}
-
-static uint32_t AFEInit(int id) {
-    uint32_t i = 0;
-
-    AFEWriteUser(id);
-    if(AFEVerifyUser(id))
-        return 1;
-    spi_AFEWriteRegister(0x05,0x4000); //Clear RESET Flag
-    spi_AFEWriteRegister(0x0d,31); //Setup Balancer
-    return 0;
-}
-
-static void AFEWriteUser(int id) {
-    spi_AFEWriteRegister(0x45,0x95); // USER Unlock
-    uint32_t i=0;
-    while (g_PackUserConfig[id][i].address > 0) {
-        spi_AFEWriteRegister(
-            g_PackUserConfig[id][i].address,
-            g_PackUserConfig[id][i].data);
-        i++;
-    }
-    spi_AFEWriteRegister(0x45,0x95); // USER Unlock
-}
-
-static uint32_t AFEVerifyUser(int id) {
-    uint32_t i=0;
-    while (g_PackUserConfig[id][i].address > 0) {
-        uint32_t start = i;
-        uint32_t len = 1;
-
-        // Suche, wie viele aufeinanderfolgende Register wir haben (max. 32)
-        while (g_PackUserConfig[id][start + len].address ==
-               g_PackUserConfig[id][start + len - 1].address + 1 &&
-               len < 32 &&
-               g_PackUserConfig[id][start + len].address > 0)
-            len++;
-
-        // Lese den ganzen Block auf einmal
-        uint16_t readback[32]; // max Blockgröße
-        spi_AFEReadRegister(
-                g_PackUserConfig[id][start].address,
-                readback,
-                len
-            );
-
-        // Vergleiche jedes Register im Block
-        for (uint32_t j = 0; j < len; j++)
-            if (g_PackUserConfig[id][start + j].data != readback[j])
-                return 1;
-
-        i += len; // Nächster Block
-    }
-    return 0;
-}
-
-static void AFEReadData(int id) {
-    uint16_t data[28];
-
-    spi_AFEReadRegister(0x01, data, 16);
-    PACK_PDO.hwStatus = data[0];
-    PACK_PDO.hwAlertFlags = (data[2] << 16) | data[1];
-    PACK_PDO.hwAlertState = (data[5] << 16) | data[4];
-    PACK_PDO.hwAlertCellUnderOvervoltage = (data[7] << 16) | data[6];
-    PACK_PDO.hwAlertAux = data[9];
-    PACK_PDO.hwBalancerTimer = data[14];
-    PACK_PDO.hwBalancerStatus = data[15];
-
-    spi_AFEReadRegister(0x84, data, 28);
-    PACK_PDO.current = (float)((int16_t)data[0]) * PACK_GENERALCONFIG->cadcCurrentFactor;
-    PACK_PDO.voltage = (float)data[1] * 1.6e-3;
-    PACK_PDO.pvddVoltage = (float)data[2] * 2.5e-3;
-    for(int i=0; i < 16; i++)
-        PACK_PDO.cells[i] = (float)data[3 + i] * 100e-6;
-    for(int i=0; i < 4; i++)
-        PACK_PDO.ntcTemperature[i] = NtcToTemperature((float)data[20 + i], PACK_GENERALCONFIG->ntcPolynom, 11);
-    PACK_PDO.dieTemperature = (float)(25437 - data[26]) / 59.17 - 64.5;
-    PACK_PDO.fastCurrent = (float)(data[27] & 0x7fff) * PACK_GENERALCONFIG->vadcCurrentFactor;
-    if (data[27] & 0x8000)
-        PACK_PDO.fastCurrent = -PACK_PDO.fastCurrent;
-}
-
-static uint32_t AFEWireDiag(uint16_t *data)
-{
-#define KABELBRUCH_MAX_DELTA 200
-    for(int i=16; i<=32;i+=16)
-        for(int j=0; j<16;j++)
-        {
-            int32_t delta;
-            delta = data[j] - data[i+j];
-            if(delta < 0)
-                delta = -delta;
-            if((delta >= KABELBRUCH_MAX_DELTA))
-                return 1; //Kabelbruch erkannt
-        }
-    return 0;
-}
-
-static uint32_t AFEBalancer (int id) {
-    float avg_vcell=floatAvgVal(PACK_PDO.cells,16);
-    
-    uint32_t new_balance = 0;
-    for(int i=0; i<16; i++)
-        if((PACK_PDO.cells[i] - avg_vcell) > PACK_GENERALCONFIG->balancerDiffVoltage)
-            new_balance |= (1 << i);
-
-    spi_AFEWriteRegister(0x0c,new_balance);
-    spi_AFEWriteRegister(0x0f,40); //40 * 0,25 -> 10sek
-
-    return (new_balance>0);
-}
-
-static uint32_t AFECheckPowerupComplete() {
-    uint16_t data;
-    spi_AFEReadRegister(0x00, &data, 1);
-    return data == 0x6000; /* TOP_STATUS muss auf Power-up Complete sein */
 }

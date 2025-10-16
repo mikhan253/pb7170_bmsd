@@ -1,0 +1,101 @@
+#include <stdio.h>
+#include <unistd.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <float.h>
+
+#include "bms.h"
+#include "dataobjects.h"
+
+PACK_PDO_t PackPdoData[MAX_BATTERY_PACKS];
+PACK_SDO_t PackSdoData[MAX_BATTERY_PACKS];
+PACK_USERCONF_t PackUserConfig[MAX_BATTERY_PACKS];
+PACK_GENERALCONF_t PackGeneralConfig[MAX_BATTERY_PACKS];
+PACK_CALIBRATION_t PackCalibration[MAX_BATTERY_PACKS];
+
+PACK_PDO_t* g_PackPdoData = NULL;
+PACK_SDO_t* g_PackSdoData = NULL;
+PACK_USERCONF_t* g_PackUserConfig[MAX_BATTERY_PACKS];
+PACK_GENERALCONF_t* g_PackGeneralConfig[MAX_BATTERY_PACKS];
+PACK_CALIBRATION_t* g_PackCalibration[MAX_BATTERY_PACKS];
+
+int spi_SelectDevice(uint_fast8_t device)
+{return 0;};
+int spi_Init(const char *spiDevice, uint32_t speed, uint8_t mode, uint8_t bits, const char *gpioDevice, const unsigned int *gpioPins, const unsigned int gpioNrPins)
+{return 0;};
+int spi_AFEReadRegister(uint8_t addr, uint16_t* output, uint_fast8_t count)
+{return 0;};
+int spi_AFEWriteRegister(uint8_t addr, uint16_t data)
+{return 0;};
+
+
+#include "bms.c"
+
+int main() {
+    uint32_t id=0;
+    uint32_t errors=0;
+    printf("UNIT FEST für BMS.C\n");
+    g_PackPdoData = PackPdoData;
+    g_PackGeneralConfig[id] = &PackGeneralConfig[id];
+
+#define SET_NTC(x) for(int i=0;i<4;i++) PACK_PDO.ntcTemperature[i]=x;
+#define CT_TEMP 
+
+
+
+
+printf("CalculateParametersAndLimits\n");
+    PACK_GENERALCONFIG->currentTableTemperature[0] = -30;
+    PACK_GENERALCONFIG->currentTableTemperature[1] = -20;
+    PACK_GENERALCONFIG->currentTableTemperature[2] = -10;
+    PACK_GENERALCONFIG->currentTableTemperature[3] = 0;
+    PACK_GENERALCONFIG->currentTableTemperature[4] = 5;
+    PACK_GENERALCONFIG->currentTableTemperature[5] = 10;
+    PACK_GENERALCONFIG->currentTableTemperature[6] = 15;
+    PACK_GENERALCONFIG->currentTableChargeCurrent[0] = 0;
+    PACK_GENERALCONFIG->currentTableChargeCurrent[1] = 0;
+    PACK_GENERALCONFIG->currentTableChargeCurrent[2] = 0;
+    PACK_GENERALCONFIG->currentTableChargeCurrent[3] = 15.7;
+    PACK_GENERALCONFIG->currentTableChargeCurrent[4] = 37.6;
+    PACK_GENERALCONFIG->currentTableChargeCurrent[5] = 94.2;
+    PACK_GENERALCONFIG->currentTableChargeCurrent[6] = 157;
+    PACK_GENERALCONFIG->currentTableDischargeCurrent[0] = 0;
+    PACK_GENERALCONFIG->currentTableDischargeCurrent[1] = -157;
+    PACK_GENERALCONFIG->currentTableDischargeCurrent[2] = -157;
+    PACK_GENERALCONFIG->currentTableDischargeCurrent[3] = -157;
+    PACK_GENERALCONFIG->currentTableDischargeCurrent[4] = -157;
+    PACK_GENERALCONFIG->currentTableDischargeCurrent[5] = -157;
+    PACK_GENERALCONFIG->currentTableDischargeCurrent[6] = -157;
+    for(int i=7;i<10;i++) {
+        PACK_GENERALCONFIG->currentTableTemperature[i] = 60;
+        PACK_GENERALCONFIG->currentTableChargeCurrent[i] = 0;
+        PACK_GENERALCONFIG->currentTableDischargeCurrent[i] = 0;
+    }
+    PACK_PDO.mosfetStatus_bits.CHARGE = 1;
+    PACK_PDO.mosfetStatus_bits.DISCHARGE = 1;
+    PACK_GENERALCONFIG->bmsMaxCurrent = 200;
+    PACK_GENERALCONFIG->bmsMaxCurrentReduced = 50;
+    PACK_GENERALCONFIG->prechargeResistorI2tDecay=0.1;
+    PACK_PDO.current = 0;
+
+#define TESTCASE(nr, set1, expect1, expect2) \
+        SET_NTC(set1); \
+        CalculateParametersAndLimits(id); \
+        if( (PACK_PDO.availableChargeCurrent != expect1) || (PACK_PDO.availableDischargeCurrent != expect2) ) { \
+            printf("   TC%02u FAIL: ntcTemperature=%f\n              availableChargeCurrent=%f (expect %f)\n              availableDischargeCurrent=%f (expect %f)\n",nr, PACK_PDO.ntcTemperature[0], PACK_PDO.availableChargeCurrent, expect1, PACK_PDO.availableDischargeCurrent, expect2); \
+            errors++; \
+        }
+
+    TESTCASE( 1,  -40.0f ,     0.0f ,       0.0f)
+    TESTCASE( 2,  -30.0f ,     0.0f ,       0.0f)
+    TESTCASE( 3,  -20.1f ,     0.0f ,       0.0f)
+    TESTCASE( 4,  -20.0f ,     0.0f ,    -157.0f)
+    TESTCASE( 5,  -19.9f ,     0.0f ,    -157.0f)
+    TESTCASE( 6,    0.0f ,    15.7f ,    -157.0f)
+    TESTCASE( 7,   30.0f ,   157.0f ,    -157.0f)
+    TESTCASE( 8,   59.9f ,   157.0f ,    -157.0f)
+    TESTCASE( 9,   60.0f ,     0.0f ,       0.0f)
+    TESTCASE(10,   90.0f ,     0.0f ,       0.0f)
+
+    return 0;
+}

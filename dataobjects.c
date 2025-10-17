@@ -8,7 +8,7 @@
 #include <unistd.h>     // für ftruncate
 #include "dataobjects.h"
 
-// SHMEM Objekt
+// SHMEM Objekte
 GLOBAL_PDO_t* g_GlobalPdoData = NULL;
 PACK_PDO_t* g_PackPdoData = NULL;
 PACK_SDO_t* g_PackSdoData = NULL;
@@ -19,9 +19,6 @@ PACK_USERCONF_t* g_PackUserConfig[MAX_BATTERY_PACKS];
 PACK_GENERALCONF_t* g_PackGeneralConfig[MAX_BATTERY_PACKS];
 PACK_CALIBRATION_t* g_PackCalibration[MAX_BATTERY_PACKS];
 uint16_t g_packEnabled = 0;
-
-// SHMEM Konfiguration
-
 
 // ---------------------------------------------------------
 // generische Datei-Ladefunktion
@@ -100,7 +97,7 @@ static void PrintLoadState(const char* filename, int duplicate_of) {
 
 // ---------------------------------------------------------
 // SHMEM initialisieren
-static int InitShmem(void* target, char* name, size_t size) {
+static int InitShmem(void** target, const char* name, size_t size) {
     shm_unlink(name); // lösche altes Objekt
 
     int shm_fd = shm_open(name, O_CREAT | O_RDWR, 0666);
@@ -115,65 +112,93 @@ static int InitShmem(void* target, char* name, size_t size) {
         return -1;
     }
 
-    target = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
-    if (target == MAP_FAILED) {
+    *target = mmap(NULL, size, PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
+    if (*target == MAP_FAILED) {
         perror("mmap");
         close(shm_fd);
         return -1;
     }
 
-    memset(target, 0, size); // Speicher initialisieren
-    printf("Shared Memory: %s (size=%u)\n",name, size);
+    memset(*target, 0, size); // Speicher initialisieren
+    printf("Shared Memory: %s (size=%zu)\n", name, size);
     close(shm_fd);
     return 0;
 }
 
+// ---------------------------------------------------------
 void dob_LoadPackConfigs(void)
 {
-    if (InitShmem(g_PackPdoData, "/battery_pdo_shm", sizeof(PACK_PDO_t) * MAX_BATTERY_PACKS) != 0) {
+    char filename[64];
+    int duplicate_of;
+
+    // -----------------------------------------------------
+    // GlobalConfig laden
+    snprintf(filename, sizeof(filename), "conf/global.bin");
+    duplicate_of = -1;
+    void* global_buf = LoadBinaryFile(
+        filename,
+        sizeof(GLOBAL_CONF_t),
+        &duplicate_of,
+        NULL,
+        0,
+        0,   // kein Terminator prüfen
+        1    // exakte Größe erforderlich
+    );
+    if (!global_buf) {
+        printf("Fehler: '%s' konnte nicht geladen werden oder hat falsche Größe.\n", filename);
+        return;
+    }
+    g_GlobalConfig = *(GLOBAL_CONF_t*)global_buf;
+    free(global_buf);
+    printf("- %s geladen\n", filename);
+
+    // -----------------------------------------------------
+    // Shared Memory für PDO: globalPDO + PackPDO
+    size_t numPacks = g_GlobalConfig.numberOfPacks;
+    if (numPacks == 0 || numPacks > MAX_BATTERY_PACKS) {
+        printf("Fehler: Ungültige Anzahl Packs in global config: %zu\n", numPacks);
+        return;
+    }
+
+    size_t shmSize = sizeof(GLOBAL_PDO_t) + sizeof(PACK_PDO_t) * numPacks;
+    void* shm_ptr = NULL;
+    if (InitShmem(&shm_ptr, "/battery_pdo_shm", shmSize) != 0) {
         printf("Fehler: SHMEM_PDO konnte nicht initialisiert werden.\n");
         return;
     }
-    if (InitShmem(g_PackSdoData, "/battery_sdo_shm", sizeof(PACK_SDO_t) * MAX_BATTERY_PACKS) != 0) {
+
+    g_GlobalPdoData = (GLOBAL_PDO_t*)shm_ptr;
+    g_PackPdoData   = (PACK_PDO_t*)(g_GlobalPdoData + 1);
+
+    // -----------------------------------------------------
+    // Shared Memory für SDO
+    if (InitShmem((void**)&g_PackSdoData, "/battery_sdo_shm", sizeof(PACK_SDO_t) * numPacks) != 0) {
         printf("Fehler: SHMEM_SDO konnte nicht initialisiert werden.\n");
         return;
     }
 
-    char filename[64];
     g_packEnabled = 0;
 
     printf("Lade Konfigurationsdateien...\n");
-    for (int i = 0; i < MAX_BATTERY_PACKS; i++) {
+    for (int i = 0; i < numPacks; i++) {
         g_PackPdoData[i].stateMachine = AFE_STATE_DISABLED;
 
-        struct stat st;
+        // UserConfig
         snprintf(filename, sizeof(filename), "conf/pack%d_userconf.bin", i);
-        if (stat(filename, &st) != 0) continue;
-
-        snprintf(filename, sizeof(filename), "conf/pack%d_generalconf.bin", i);
-        if (stat(filename, &st) != 0) continue;
-
-        snprintf(filename, sizeof(filename), "conf/pack%d_calibration.bin", i);
-        if (stat(filename, &st) != 0) continue;
-
-        int duplicate_of;
-
-        snprintf(filename, sizeof(filename), "conf/pack%d_userconf.bin", i);
-        duplicate_of = -1;
         g_PackUserConfig[i] = LoadBinaryFile(
             filename,
             sizeof(PACK_USERCONF_t),
             &duplicate_of,
             (void**)g_PackUserConfig,
             i,
-            1,
+            1, // Terminator prüfen
             0
         );
         if (!g_PackUserConfig[i]) continue;
         PrintLoadState(filename, duplicate_of);
 
+        // GeneralConfig
         snprintf(filename, sizeof(filename), "conf/pack%d_generalconf.bin", i);
-        duplicate_of = -1;
         g_PackGeneralConfig[i] = LoadBinaryFile(
             filename,
             sizeof(PACK_GENERALCONF_t),
@@ -186,8 +211,8 @@ void dob_LoadPackConfigs(void)
         if (!g_PackGeneralConfig[i]) continue;
         PrintLoadState(filename, duplicate_of);
 
+        // Calibration
         snprintf(filename, sizeof(filename), "conf/pack%d_calibration.bin", i);
-        duplicate_of = -1;
         g_PackCalibration[i] = LoadBinaryFile(
             filename,
             sizeof(PACK_CALIBRATION_t),
@@ -199,11 +224,13 @@ void dob_LoadPackConfigs(void)
         );
         if (!g_PackCalibration[i]) continue;
         PrintLoadState(filename, duplicate_of);
+
+        // Pack aktivieren
         g_PackPdoData[i].id = i + 1;
         g_packEnabled |= (1 << i);
     }
 
-    for (int i = 0; i < MAX_BATTERY_PACKS; i++)
-        if (g_packEnabled & (1 << i)) 
+    for (int i = 0; i < numPacks; i++)
+        if (g_packEnabled & (1 << i))
             printf("Pack %d aktiviert\n", i);
 }

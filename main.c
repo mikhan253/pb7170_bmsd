@@ -62,8 +62,7 @@ int main(void) {
         struct timespec t_start, t_end;
         clock_gettime(CLOCK_MONOTONIC, &t_start);
 #endif
-        //for (uint32_t curId = 0; curId < MAX_BATTERY_PACKS)
-        for(uint32_t curId = 0; curId <= 7; curId++)
+        for(uint32_t curId = 0; curId <= g_GlobalConfig.numberOfPacks; curId++)
         {
             if ((g_packEnabled & (1 << curId)) == 0)
                 continue;

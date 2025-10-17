@@ -32,6 +32,15 @@ typedef enum {
 } EStateMachineMos_t;
 
 typedef struct {
+    float voltage;
+    float current;
+} GLOBAL_PDO_t;
+
+typedef struct {
+    float prechargeDeltaVoltage;
+} GLOBAL_CONF_t;
+
+typedef struct {
     /***************** Allgemeine Informationen *****************/
     uint32_t id;
     EStateMachine_t stateMachine;
@@ -237,6 +246,8 @@ typedef struct {
     float pvddGain;
 } PACK_CALIBRATION_t;
 
+extern GLOBAL_CONF_t g_GlobalConfig;
+extern GLOBAL_PDO_t* g_GlobalPdoData;
 extern PACK_PDO_t* g_PackPdoData;
 extern PACK_SDO_t* g_PackSdoData;
 extern PACK_USERCONF_t* g_PackUserConfig[MAX_BATTERY_PACKS];

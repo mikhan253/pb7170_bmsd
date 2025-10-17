@@ -9,10 +9,12 @@
 #include "dataobjects.h"
 
 // SHMEM Objekt
+GLOBAL_PDO_t* g_GlobalPdoData = NULL;
 PACK_PDO_t* g_PackPdoData = NULL;
 PACK_SDO_t* g_PackSdoData = NULL;
 
 // Globale Arrays
+GLOBAL_CONF_t g_GlobalConfig;
 PACK_USERCONF_t* g_PackUserConfig[MAX_BATTERY_PACKS];
 PACK_GENERALCONF_t* g_PackGeneralConfig[MAX_BATTERY_PACKS];
 PACK_CALIBRATION_t* g_PackCalibration[MAX_BATTERY_PACKS];

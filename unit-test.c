@@ -7,12 +7,15 @@
 #include "bms.h"
 #include "dataobjects.h"
 
+GLOBAL_PDO_t GlobalPdoData;
 PACK_PDO_t PackPdoData[MAX_BATTERY_PACKS];
 PACK_SDO_t PackSdoData[MAX_BATTERY_PACKS];
 PACK_USERCONF_t PackUserConfig[MAX_BATTERY_PACKS];
 PACK_GENERALCONF_t PackGeneralConfig[MAX_BATTERY_PACKS];
 PACK_CALIBRATION_t PackCalibration[MAX_BATTERY_PACKS];
 
+GLOBAL_CONF_t g_GlobalConfig;
+GLOBAL_PDO_t* g_GlobalPdoData = NULL;
 PACK_PDO_t* g_PackPdoData = NULL;
 PACK_SDO_t* g_PackSdoData = NULL;
 PACK_USERCONF_t* g_PackUserConfig[MAX_BATTERY_PACKS];
@@ -43,6 +46,7 @@ int main() {
     uint32_t id=0;
     uint32_t errors=0;
     printf("--- UNIT FEST für BMS.C ---\n");
+    g_GlobalPdoData = &GlobalPdoData;
     g_PackPdoData = PackPdoData;
     g_PackSdoData = PackSdoData;
     g_PackGeneralConfig[id] = &PackGeneralConfig[id];
@@ -175,20 +179,54 @@ printf("CalculateParametersAndLimits\n");
         PACK_PDO.mosfetStatus_bits.DISCHARGE = set5; \
         PACK_PDO.mosfetStatus_bits.PRECHARGE = set6; \
         PACK_PDO.voltage = set7; \
-        totViltage = set8; \
+        g_GlobalPdoData->voltage = set8; \
         MosControl(id); \
         if( (SpiReg[0x13] != expect1) ) { \
             printf("   TC%02u FAIL: ChargeEnable=%u\n",nr,set1); \
             printf("              DischargeEnable=%u\n",set2); \
             printf("              swAlertFlags=%u\n",set3); \
-            PACK_PDO.mosfetStatus.Charge \
-            printf("              MOS_TIM=%u (expect %u)\n",SpiReg[0x13],expect1); \
+            printf("              mosfetStatus_bits.CHARGE=%u\n",set4); \
+            printf("              mosfetStatus_bits.DISCHARGE=%u\n",set5); \
+            printf("              mosfetStatus_bits.PRECHARGE=%u\n",set6); \
+            printf("              voltage=%f\n",set7); \
+            printf("              global.voltage=%f\n",set8); \
+            printf("              MOS_TRIG=%u (expect %u)\n",SpiReg[0x13],expect1); \
             errors++; \
         }
+    g_GlobalConfig.prechargeDeltaVoltage = 1.0f;
     printf(" * Alles Aus, kein Fehler\n");
-    TESTCASE(1, 0, 0, 0, 0, 0, 0, 0, 0, 0)
-    printf(" * Alles Aus, kein Fehler\n");
-    //TESTCASE(1, 1, 0, 0, 0)
+    /*          ChaEn  DisEn  swAlert  moCha moDis moPre  voltage  globvoltage  mos_tim*/
+    TESTCASE(1, 0,     0,     0,       0,    0,    0,       40.0f,       0.0f,  0)
+    printf(" * Wechsel aus -> ein, Ladevorgang, keine Fehler\n");
+    TESTCASE(1, 1,     1,     0,       0,    0,    0,       40.0f,       0.0f,  4)
+    TESTCASE(2, 1,     1,     0,       0,    0,    1,       40.0f,       0.0f,  4)
+    TESTCASE(3, 1,     1,     0,       0,    0,    1,       40.0f,       38.0f,  4)
+    TESTCASE(4, 1,     1,     0,       0,    0,    1,       40.0f,       39.0f,  7) //Wechsel in alle ein
+    TESTCASE(5, 1,     1,     0,       1,    1,    1,       40.0f,       40.0f,  3) //Precharge wird wieder abgedreht
+    TESTCASE(6, 1,     1,     0,       1,    1,    0,       40.0f,       40.0f,  3)
+    printf(" * Wechsel ein -> aus, keine Fehler\n");
+    TESTCASE(1, 1,     1,     0,       1,    1,    0,       40.0f,       40.0f,  3)
+    TESTCASE(2, 0,     0,     0,       1,    1,    0,       40.0f,       40.0f,  0)
+    printf(" * Wechsel aus -> ein, ohne Ladevorgang, keine Fehler\n");
+    TESTCASE(1, 1,     1,     0,       0,    0,    0,       40.0f,       40.0f,  4)
+    TESTCASE(2, 1,     1,     0,       0,    0,    1,       40.0f,       40.0f,  7)
+    TESTCASE(3, 1,     1,     0,       1,    1,    1,       40.0f,       40.0f,  3)
+    TESTCASE(4, 1,     1,     0,       1,    1,    0,       40.0f,       40.0f,  3)
+    printf(" * Discharge ein, Charge aus -> ein, ohne Ladevorgang, keine Fehler\n");
+    TESTCASE(1, 0,     1,     0,       1,    1,    0,       40.0f,       40.0f,  1)
+    TESTCASE(2, 0,     1,     0,       0,    1,    0,       40.0f,       40.0f,  1)
+    TESTCASE(3, 1,     1,     0,       0,    1,    0,       40.0f,       40.0f,  5)
+    TESTCASE(4, 1,     1,     0,       0,    1,    1,       40.0f,       40.0f,  7)
+    TESTCASE(5, 1,     1,     0,       1,    1,    1,       40.0f,       40.0f,  3)
+    TESTCASE(6, 1,     1,     0,       1,    1,    0,       40.0f,       40.0f,  3)
+    printf(" * Discharge aus -> ein, Charge ein, ohne Ladevorgang, keine Fehler\n");
+    TESTCASE(1, 1,     0,     0,       1,    1,    0,       40.0f,       40.0f,  2)
+    TESTCASE(2, 1,     0,     0,       1,    0,    0,       40.0f,       40.0f,  2)
+    TESTCASE(3, 1,     1,     0,       1,    0,    0,       40.0f,       40.0f,  6)
+    TESTCASE(4, 1,     1,     0,       1,    0,    1,       40.0f,       40.0f,  7)
+    TESTCASE(5, 1,     1,     0,       1,    1,    1,       40.0f,       40.0f,  3)
+    TESTCASE(6, 1,     1,     0,       1,    1,    0,       40.0f,       40.0f,  3)
+
 #undef TESTCASE
 /*********************************************************************************************/
     printf("%u Fehler\n",errors);

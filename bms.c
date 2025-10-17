@@ -64,10 +64,8 @@ static void CalculateParametersAndLimits(int id) {
     for(tableId = GENERALCONF_CURRENTTABLE_SIZE - 1; tableId > 0; tableId--)
         if(temperature >= PACK_GENERALCONFIG->currentTableTemperature[tableId])
             break;
-    if (chargeCurrent > PACK_GENERALCONFIG->currentTableChargeCurrent[tableId])
-        chargeCurrent = PACK_GENERALCONFIG->currentTableChargeCurrent[tableId];
-    if (dischargeCurrent < PACK_GENERALCONFIG->currentTableDischargeCurrent[tableId])
-        dischargeCurrent = PACK_GENERALCONFIG->currentTableDischargeCurrent[tableId];
+    chargeCurrent = fminf(chargeCurrent,PACK_GENERALCONFIG->currentTableChargeCurrent[tableId]);
+    dischargeCurrent = fmaxf(dischargeCurrent,PACK_GENERALCONFIG->currentTableDischargeCurrent[tableId]);
 
     PACK_PDO.availableChargeCurrent = chargeCurrent;
     PACK_PDO.availableDischargeCurrent = dischargeCurrent;
@@ -143,7 +141,54 @@ static void ErrorHandler(int id) {
  * xxx
  * UNITTEST verfügbar
  **********************************************************************************************************/
-static void MosControl(int id) {
+static void MosControl(int id)
+{
+    uint16_t mosVal = 0;
+
+    uint8_t errorAll =
+        PACK_PDO_SWALERTFLAG_BITS.SHORT ||
+        PACK_PDO_SWALERTFLAG_BITS.CHIPSTATE_ERR ||
+        PACK_PDO_SWALERTFLAG_BITS.HW_OVERTEMP ||
+        PACK_PDO_SWALERTFLAG_BITS.HW_UNDERTEMP ||
+        PACK_PDO_SWALERTFLAG_BITS.PACK_OVERTEMP ||
+        PACK_PDO_SWALERTFLAG_BITS.PACK_UNDERTEMP ||
+        PACK_PDO_SWALERTFLAG_BITS.TEMP_MISMATCH ||
+        PACK_PDO_SWALERTFLAG_BITS.COMM_ERR ||
+        PACK_PDO_SWALERTFLAG_BITS.DIAG_ERR ||
+        PACK_PDO_SWALERTFLAG_BITS.CELL_MISMATCH ||
+        PACK_PDO_SWALERTFLAG_BITS.PRECHARGE_FAIL ||
+        PACK_PDO_SWALERTFLAG_BITS.CURRENT_ABNORMAL;
+
+    uint8_t errorCharge =
+        PACK_PDO_SWALERTFLAG_BITS.HW_CHARGE_OC ||
+        PACK_PDO_SWALERTFLAG_BITS.SW_CHARGE_OC ||
+        PACK_PDO_SWALERTFLAG_BITS.PACK_OV ||
+        PACK_PDO_SWALERTFLAG_BITS.CELL_OV;
+
+    uint8_t errorDischarge =
+        PACK_PDO_SWALERTFLAG_BITS.HW_DISCHARGE_OC ||
+        PACK_PDO_SWALERTFLAG_BITS.SW_DISCHARGE_OC ||
+        PACK_PDO_SWALERTFLAG_BITS.PACK_UV ||
+        PACK_PDO_SWALERTFLAG_BITS.CELL_UV;
+
+    uint8_t allowCharge    = PACK_SDO.ChargeEnable && !(errorAll || errorCharge);
+    uint8_t allowDischarge = PACK_SDO.DischargeEnable && !(errorAll || errorDischarge);
+
+    if(PACK_PDO.mosfetStatus_bits.PRECHARGE && (fabsf(PACK_PDO.voltage - g_GlobalPdoData->voltage) <= g_GlobalConfig.prechargeDeltaVoltage)) {
+        if (allowDischarge) mosVal |= (1 << 0);
+        if (allowCharge)    mosVal |= (1 << 1);
+    }
+
+    if (allowDischarge)
+        mosVal |= (PACK_PDO.mosfetStatus_bits.DISCHARGE ? (1 << 0) : (1 << 2));
+
+    if (allowCharge)
+        mosVal |= (PACK_PDO.mosfetStatus_bits.CHARGE ? (1 << 1) : (1 << 2));
+
+    spi_AFEWriteRegister(0x13, mosVal);
+}
+
+/*static void MosControl(int id) {
     uint16_t mosVal=0;
 
     uint8_t errorAll = 
@@ -170,17 +215,29 @@ static void MosControl(int id) {
         PACK_PDO_SWALERTFLAG_BITS.PACK_UV ||
         PACK_PDO_SWALERTFLAG_BITS.CELL_UV;
     
+    if(PACK_PDO.mosfetStatus_bits.PRECHARGE) {
+        if(fabsf(PACK_PDO.voltage - g_GlobalPdoData->voltage) <= g_GlobalConfig.prechargeDeltaVoltage) {
+            if(PACK_SDO.DischargeEnable && !(errorAll || errorDischarge))
+                mosVal |= (1 << 0);
+            if(PACK_SDO.ChargeEnable && !(errorAll || errorCharge))
+                mosVal |= (1 << 1);
+        }
+    }
+
     if( ((PACK_SDO.DischargeEnable && !(errorAll || errorDischarge)) == 1) &&
-        (PACK_PDO.mosfetStatus_bits.DISCHARGE == 0)) //Wechsel von Discharge off -> on erfordert Precharge
+        (PACK_PDO.mosfetStatus_bits.DISCHARGE == 0))
         mosVal |= (1 << 2);
     else
         if(PACK_SDO.DischargeEnable && !(errorAll || errorDischarge))
             mosVal |= (1 << 0);
-    
-    if(PACK_SDO.ChargeEnable && !(errorAll || errorCharge))
-        mosVal |= (1 << 1);
+    if( ((PACK_SDO.ChargeEnable && !(errorAll || errorCharge)) == 1) &&
+        (PACK_PDO.mosfetStatus_bits.CHARGE == 0))
+        mosVal |= (1 << 2);
+    else
+        if(PACK_SDO.ChargeEnable && !(errorAll || errorCharge))
+            mosVal |= (1 << 1);
     spi_AFEWriteRegister(0x13,mosVal);
-}
+}*/
 
 static void AFEWriteUser(int id) {
     spi_AFEWriteRegister(0x45,0x95); // USER Unlock

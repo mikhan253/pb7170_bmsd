@@ -22,16 +22,6 @@ typedef enum {
     AFE_STATE_COUNT  // Anzahl der States (letztes Element)
 } EStateMachine_t;
 
-typedef enum {
-    MOS_STATE_DISCONNECTED = 0,
-    MOS_STATE_CHARGE_ONLY,
-    MOS_STATE_DISCHARGE_ONLY,
-    MOS_STATE_PRECHARGE,
-    MOS_STATE_PRECHARGE_WAIT,
-    MOS_STATE_CONNECTED,
-    MOS_STATE_COUNT  // Anzahl der States (letztes Element)
-} EStateMachineMos_t;
-
 typedef struct {
     uint32_t numberOfPacks;
     float voltage;
@@ -186,7 +176,6 @@ typedef struct {
             uint32_t DISCHARGE : 1;
         } mosfetStatus_bits;
     };
-    EStateMachineMos_t stateMosfetControl;
     float prechargeResistorI2t;
 
     float current;

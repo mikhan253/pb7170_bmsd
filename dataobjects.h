@@ -3,6 +3,7 @@
 
 #define MAX_BATTERY_PACKS 10
 #define GENERALCONF_CURRENTTABLE_SIZE 10
+#define NUMBER_OF_CELLS 16
 
 typedef enum {
     AFE_STATE_WAIT_INIT = 0,
@@ -32,12 +33,16 @@ typedef enum {
 } EStateMachineMos_t;
 
 typedef struct {
+    uint32_t numberOfPacks;
     float voltage;
     float current;
 } GLOBAL_PDO_t;
 
 typedef struct {
+    uint32_t numberOfPacks;
+    uint32_t diagWireBreakDelta;
     float prechargeDeltaVoltage;
+
 } GLOBAL_CONF_t;
 
 typedef struct {
@@ -186,7 +191,7 @@ typedef struct {
 
     float current;
     float fastCurrent;
-    float cells[16];
+    float cells[NUMBER_OF_CELLS];
     float ntcTemperature[4];
     float dieTemperature;
     float voltage;

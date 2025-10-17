@@ -16,7 +16,7 @@ OBJS := $(SRC:.c=.o)
 TARGET := bmsd
 
 # Compiler flags
-CFLAGS := -O2 -Wall -lgpiod -lm
+CFLAGS := -O2 -Wall -lgpiod
 
 CFLAGS += -mcpu=cortex-a7 -mfpu=neon-vfpv4 -mfloat-abi=hard -ffast-math -ftree-vectorize -fomit-frame-pointer
 
@@ -43,7 +43,7 @@ push:
 	tar czf - bmsd conf webserver | ssh $(PUSH_MACHINE) "tar xzf - -C /tmp"
 
 unittest:
-	@gcc -o unittest-$(TARGET) -O2 $(UNITTESTFLAGS) -lm unit-test.c
+	@gcc -o unittest-$(TARGET) -O2 $(UNITTESTFLAGS) unit-test.c
 	@./unittest-$(TARGET)
 	@rm unittest-$(TARGET)
 

@@ -195,37 +195,71 @@ printf("CalculateParametersAndLimits\n");
         }
     g_GlobalConfig.prechargeDeltaVoltage = 1.0f;
     printf(" * Alles Aus, kein Fehler\n");
-    /*          ChaEn  DisEn  swAlert  moCha moDis moPre  voltage  globvoltage  mos_tim*/
-    TESTCASE(1, 0,     0,     0,       0,    0,    0,       40.0f,       0.0f,  0)
+    /*           ChaEn  DisEn  swAlert  moCha moDis moPre  voltage  globvoltage  mos_tim*/
+    TESTCASE( 1, 0,     0,     0,       0,    0,    0,       40.0f,       0.0f,  0)
     printf(" * Wechsel aus -> ein, Ladevorgang, keine Fehler\n");
-    TESTCASE(1, 1,     1,     0,       0,    0,    0,       40.0f,       0.0f,  4)
-    TESTCASE(2, 1,     1,     0,       0,    0,    1,       40.0f,       0.0f,  4)
-    TESTCASE(3, 1,     1,     0,       0,    0,    1,       40.0f,       38.0f,  4)
-    TESTCASE(4, 1,     1,     0,       0,    0,    1,       40.0f,       39.0f,  7) //Wechsel in alle ein
-    TESTCASE(5, 1,     1,     0,       1,    1,    1,       40.0f,       40.0f,  3) //Precharge wird wieder abgedreht
-    TESTCASE(6, 1,     1,     0,       1,    1,    0,       40.0f,       40.0f,  3)
+    TESTCASE( 1, 1,     1,     0,       0,    0,    0,       40.0f,       0.0f,  4)
+    TESTCASE( 2, 1,     1,     0,       0,    0,    1,       40.0f,       0.0f,  4)
+    TESTCASE( 3, 1,     1,     0,       0,    0,    1,       40.0f,       38.0f,  4)
+    TESTCASE( 4, 1,     1,     0,       0,    0,    1,       40.0f,       39.0f,  7) //Wechsel in alle ein
+    TESTCASE( 5, 1,     1,     0,       1,    1,    1,       40.0f,       40.0f,  3) //Precharge wird wieder abgedreht
+    TESTCASE( 6, 1,     1,     0,       1,    1,    0,       40.0f,       40.0f,  3)
     printf(" * Wechsel ein -> aus, keine Fehler\n");
-    TESTCASE(1, 1,     1,     0,       1,    1,    0,       40.0f,       40.0f,  3)
-    TESTCASE(2, 0,     0,     0,       1,    1,    0,       40.0f,       40.0f,  0)
+    TESTCASE( 1, 1,     1,     0,       1,    1,    0,       40.0f,       40.0f,  3)
+    TESTCASE( 2, 0,     0,     0,       1,    1,    0,       40.0f,       40.0f,  0)
     printf(" * Wechsel aus -> ein, ohne Ladevorgang, keine Fehler\n");
-    TESTCASE(1, 1,     1,     0,       0,    0,    0,       40.0f,       40.0f,  4)
-    TESTCASE(2, 1,     1,     0,       0,    0,    1,       40.0f,       40.0f,  7)
-    TESTCASE(3, 1,     1,     0,       1,    1,    1,       40.0f,       40.0f,  3)
-    TESTCASE(4, 1,     1,     0,       1,    1,    0,       40.0f,       40.0f,  3)
+    TESTCASE( 1, 1,     1,     0,       0,    0,    0,       40.0f,       40.0f,  4)
+    TESTCASE( 2, 1,     1,     0,       0,    0,    1,       40.0f,       40.0f,  7)
+    TESTCASE( 3, 1,     1,     0,       1,    1,    1,       40.0f,       40.0f,  3)
+    TESTCASE( 4, 1,     1,     0,       1,    1,    0,       40.0f,       40.0f,  3)
     printf(" * Discharge ein, Charge aus -> ein, ohne Ladevorgang, keine Fehler\n");
-    TESTCASE(1, 0,     1,     0,       1,    1,    0,       40.0f,       40.0f,  1)
-    TESTCASE(2, 0,     1,     0,       0,    1,    0,       40.0f,       40.0f,  1)
-    TESTCASE(3, 1,     1,     0,       0,    1,    0,       40.0f,       40.0f,  5)
-    TESTCASE(4, 1,     1,     0,       0,    1,    1,       40.0f,       40.0f,  7)
-    TESTCASE(5, 1,     1,     0,       1,    1,    1,       40.0f,       40.0f,  3)
-    TESTCASE(6, 1,     1,     0,       1,    1,    0,       40.0f,       40.0f,  3)
+    TESTCASE( 1, 0,     1,     0,       1,    1,    0,       40.0f,       40.0f,  1)
+    TESTCASE( 2, 0,     1,     0,       0,    1,    0,       40.0f,       40.0f,  1)
+    TESTCASE( 3, 1,     1,     0,       0,    1,    0,       40.0f,       40.0f,  5)
+    TESTCASE( 4, 1,     1,     0,       0,    1,    1,       40.0f,       40.0f,  7)
+    TESTCASE( 5, 1,     1,     0,       1,    1,    1,       40.0f,       40.0f,  3)
+    TESTCASE( 6, 1,     1,     0,       1,    1,    0,       40.0f,       40.0f,  3)
     printf(" * Discharge aus -> ein, Charge ein, ohne Ladevorgang, keine Fehler\n");
-    TESTCASE(1, 1,     0,     0,       1,    1,    0,       40.0f,       40.0f,  2)
-    TESTCASE(2, 1,     0,     0,       1,    0,    0,       40.0f,       40.0f,  2)
-    TESTCASE(3, 1,     1,     0,       1,    0,    0,       40.0f,       40.0f,  6)
-    TESTCASE(4, 1,     1,     0,       1,    0,    1,       40.0f,       40.0f,  7)
-    TESTCASE(5, 1,     1,     0,       1,    1,    1,       40.0f,       40.0f,  3)
-    TESTCASE(6, 1,     1,     0,       1,    1,    0,       40.0f,       40.0f,  3)
+    TESTCASE( 1, 1,     0,     0,       1,    1,    0,       40.0f,       40.0f,  2)
+    TESTCASE( 2, 1,     0,     0,       1,    0,    0,       40.0f,       40.0f,  2)
+    TESTCASE( 3, 1,     1,     0,       1,    0,    0,       40.0f,       40.0f,  6)
+    TESTCASE( 4, 1,     1,     0,       1,    0,    1,       40.0f,       40.0f,  7)
+    TESTCASE( 5, 1,     1,     0,       1,    1,    1,       40.0f,       40.0f,  3)
+    TESTCASE( 6, 1,     1,     0,       1,    1,    0,       40.0f,       40.0f,  3)
+    printf(" * Fehler errorAll\n");
+    TESTCASE( 1, 0,     0,     3,       0,    0,    0,       40.0f,       40.0f,  0)
+    TESTCASE( 2, 0,     1,     3,       0,    0,    1,       40.0f,       40.0f,  0)
+    TESTCASE( 3, 1,     0,     3,       0,    0,    1,       40.0f,       40.0f,  0)
+    TESTCASE( 4, 1,     1,     3,       0,    0,    1,       40.0f,       40.0f,  0)
+    TESTCASE( 5, 0,     1,     3,       0,    1,    1,       40.0f,       40.0f,  0)
+    TESTCASE( 6, 1,     0,     3,       1,    0,    1,       40.0f,       40.0f,  0)
+    TESTCASE( 7, 1,     1,     3,       1,    1,    1,       40.0f,       40.0f,  0)
+    TESTCASE( 8, 0,     1,     3,       0,    1,    0,       40.0f,       40.0f,  0)
+    TESTCASE( 9, 1,     0,     3,       1,    0,    0,       40.0f,       40.0f,  0)
+    TESTCASE(10, 1,     1,     3,       1,    1,    0,       40.0f,       40.0f,  0)
+    printf(" * Fehler errorCharge\n");
+    TESTCASE( 1, 0,     0,     1,       0,    0,    0,       40.0f,       40.0f,  0)
+    TESTCASE( 2, 0,     1,     1,       0,    0,    1,       40.0f,       40.0f,  5)
+    TESTCASE( 3, 1,     0,     1,       0,    0,    1,       40.0f,       40.0f,  0)
+    TESTCASE( 4, 1,     1,     1,       0,    0,    1,       40.0f,       40.0f,  5)
+    TESTCASE( 5, 0,     1,     1,       0,    1,    1,       40.0f,       40.0f,  1)
+    TESTCASE( 6, 1,     0,     1,       1,    0,    1,       40.0f,       40.0f,  0)
+    TESTCASE( 7, 1,     1,     1,       1,    1,    1,       40.0f,       40.0f,  1)
+    TESTCASE( 8, 0,     1,     1,       0,    1,    0,       40.0f,       40.0f,  1)
+    TESTCASE( 9, 1,     0,     1,       1,    0,    0,       40.0f,       40.0f,  0)
+    TESTCASE(10, 1,     1,     1,       1,    1,    0,       40.0f,       40.0f,  1)
+    printf(" * Fehler errorDischarge\n");
+    TESTCASE( 1, 0,     0,     2,       0,    0,    0,       40.0f,       40.0f,  0)
+    TESTCASE( 2, 0,     1,     2,       0,    0,    1,       40.0f,       40.0f,  0)
+    TESTCASE( 3, 1,     0,     2,       0,    0,    1,       40.0f,       40.0f,  6)
+    TESTCASE( 4, 1,     1,     2,       0,    0,    1,       40.0f,       40.0f,  6)
+    TESTCASE( 5, 0,     1,     2,       0,    1,    1,       40.0f,       40.0f,  0)
+    TESTCASE( 6, 1,     0,     2,       1,    0,    1,       40.0f,       40.0f,  2)
+    TESTCASE( 7, 1,     1,     2,       1,    1,    1,       40.0f,       40.0f,  2)
+    TESTCASE( 8, 0,     1,     2,       0,    1,    0,       40.0f,       40.0f,  0)
+    TESTCASE( 9, 1,     0,     2,       1,    0,    0,       40.0f,       40.0f,  2)
+    TESTCASE(10, 1,     1,     2,       1,    1,    0,       40.0f,       40.0f,  2)
+
 
 #undef TESTCASE
 /*********************************************************************************************/

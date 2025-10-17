@@ -51,6 +51,9 @@ static inline void AFEClearAllErrors() {
     spi_AFEWriteRegister(0x05,0xC000);
 }
 
+static inline void AFEWatchdogEnable() {
+    spi_AFEWriteRegister(0x11,0x20B); //3sek
+}
 
 /**********************************************************************************************************
  * Berechne Stromlimits und I2t Wert Vorladung (UNITTEST)
@@ -135,7 +138,7 @@ static void ErrorHandler(int id) {
         PACK_PDO_SWALERTFLAG_BITS.SW_CHARGE_OC = 1;
     if(PACK_PDO.current < PACK_PDO.availableDischargeCurrent)
         PACK_PDO_SWALERTFLAG_BITS.SW_DISCHARGE_OC = 1;
-    if(floatMaxVal(PACK_PDO.ntcTemperature,4) > PACK_GENERALCONFIG->currentTableTemperature[9])
+    if(floatMaxVal(PACK_PDO.ntcTemperature,4) > PACK_GENERALCONFIG->currentTableTemperature[GENERALCONF_CURRENTTABLE_SIZE-1])
         PACK_PDO_SWALERTFLAG_BITS.PACK_OVERTEMP = 1;
     if(floatMinVal(PACK_PDO.ntcTemperature,4) < PACK_GENERALCONFIG->currentTableTemperature[0])
         PACK_PDO_SWALERTFLAG_BITS.PACK_UNDERTEMP = 1;
@@ -389,17 +392,36 @@ void bms_CyclicTask(uint32_t id) {
             }
             break;
         case AFE_STATE_CONFIG:
+            /*********************************************
+             * Alle Fehler löschen
+             * Watchdog initialisieren
+             *********************************************/
             AFEClearAllErrors();
+            AFEWatchdogEnable();
             printf("PACK%u: Konfiguration fertig, RUN-Mode\n", PACK_PDO.id);
+            
             PACK_PDO.stateMachine = AFE_STATE_RUN;
             break;
         case AFE_STATE_SANITY_CHECK:
-            if(AFEVerifyUser(id)) {
+            /*********************************************
+             * Register prüfen
+             *********************************************/
+            if(!AFECheckPowerupComplete() && AFEVerifyUser(id)) {
                 printf("PACK%u: Sanity-Check fehlerhaft, deaktiviere Pack\n", PACK_PDO.id);
                 PACK_PDO_SWALERTFLAG_BITS.CHIPSTATE_ERR = 1;
                 PACK_PDO.stateMachine = AFE_STATE_ERROR;
+            } else {
+                PACK_PDO.stateMachine = AFE_STATE_RUN;
             }
         case AFE_STATE_RUN:
+            /*********************************************
+             * Daten lesen
+             * Parameter und Limits berechnen
+             * Fehlerhandling
+             * Mosfets steuern
+             * SOC/SOH berechnen
+             * Zyklisch einen Sanity Check durchführen
+             *********************************************/
             AFEReadData(id);
             CalculateParametersAndLimits(id);
             ErrorHandler(id);
@@ -410,6 +432,7 @@ void bms_CyclicTask(uint32_t id) {
                         AFEBalancer(id);
                         break;
                     }
+                
             break;
         case AFE_STATE_ERROR:
             break;

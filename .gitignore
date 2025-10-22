@@ -3,4 +3,4 @@ unittest-bmsd
 .vscode
 venv
 __pycache__
-conf/*.bin
+conf/**/*.bin

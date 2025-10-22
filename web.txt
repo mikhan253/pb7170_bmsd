@@ -1,0 +1,39 @@
+{
+    "Pack 1 (EVE MB31 314Ah)": {
+        "Alrt": 4,
+        "Warn": 45,
+        "CellOV": 10,
+        "CellUV": 0,
+        "CellBal": 0,
+        "MOS": 3,
+        "Curr": 1.1,
+        "FCurr": 10.2,
+        "Cell": [ 1.1, 2.1, 3.1, 4.1, 5.1, 6.1, 7.1, 8.1, 9.1, 10.1, 11.1, 12.1, 13.1, 14.1, 15.1, 16.1 ]
+        "NTC": [ 12.1, 14.1, 15.1, 14,4 ],
+        "Die": 20.1,
+        "PVDD": 12.2,
+        "Volt": 12.4,
+        "MaxCHCurr": 100.1,
+        "MaxDSCurr": 200.1,
+        "TotCap": 310.1,
+        "SOC": 55.1,
+        "SOH": 98.1,
+        "Cyc": 1.1,
+    },
+    "Pack 2 (EVE MB31 314Ah)": ...
+}
+
+    float cells[16];
+    float ntcTemperature[4];
+    float dieTemperature;
+    float voltage;
+    float pvddVoltage;
+    float availableChargeCurrent;
+    float availableDischargeCurrent;
+
+    float availableCapacity;
+    float totalCapacity;
+    float stateOfCharge;
+    float stateOfHealth;
+    float cycleCount;
+} PACK_PDO_t;

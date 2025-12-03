@@ -6,6 +6,7 @@
 #include <signal.h>
 #include <sys/timerfd.h>
 #include <sched.h>
+#include <syslog.h>
 
 #ifdef TIME_IT
 #include <time.h>
@@ -90,9 +91,7 @@ static void CleanupResources(void) {
 
 int main(void) {
     uint64_t timerExpirations;
-    
-    printf("PB7170 BMS Controller (Build: %s %s)\n", __DATE__, __TIME__);
-    
+        
     // Signal-Handler setup
     if (SetupSignalHandlers()) {
         printf("Failed to set up signal handlers\n");
@@ -104,23 +103,26 @@ int main(void) {
         printf("Failed to set up task\n");
         return 1;
     }
-    
+
+    openlog("pb7170_bmsd", LOG_PID | LOG_CONS, LOG_DAEMON);
+    syslog(LOG_INFO, "PB7170 BMS Controller (Build: %s %s)\n", __DATE__, __TIME__);
+
     // SPI Initialisierung
     const unsigned int GPIO_PINS[3] = {24, 25, 26};
     if (spi_Init("/dev/spidev0.0", 1250000, 0, 8, "/dev/gpiochip1", GPIO_PINS, 3)) {
-        printf("Failed to initialize SPI\n");
+        syslog(LOG_ERR, "Initialisierungsfehler SPI");
         CleanupResources();
         return 1;
     }
     
     // Konfiguration laden
     if (dob_LoadPackConfigs()) {
-        printf("Failed to initialize configurations\n");
+        syslog(LOG_ERR, "Initialisierungsfehler Konfigurationen");
         CleanupResources();
         return 1;
     }
     
-    printf("--- Starte Task mit %u Packs ---\n", g_GlobalConfig.numberOfPacks);
+    syslog(LOG_INFO, "--- Starte Task mit %u Packs ---", g_GlobalConfig.numberOfPacks);
     
     // Hauptschleife
     while (!g_shutdownRequest) {
@@ -131,12 +133,12 @@ int main(void) {
                 // Bei Shutdown ist das normal
                 break;
             }
-            printf("Error reading timer: %zd bytes\n", bytesRead);
+            syslog(LOG_ERR, "Fehler beim Lesen des Timers: %zd bytes\n", bytesRead);
             continue;
         }
         
         if (timerExpirations != 1) {
-            printf("Timer expired %llu times\n", (unsigned long long)timerExpirations);
+            syslog(LOG_ALERT, "Timerüberlauf %llu mal\n", (unsigned long long)timerExpirations);
         }
         
 #ifdef TIME_IT
@@ -166,9 +168,8 @@ int main(void) {
     }
     
     // Kontrolliertes Herunterfahren
-    printf("BMS Controller herunterfahren... ");
+    syslog(LOG_INFO, "BMS Controller herunterfahren... ");
     CleanupResources();
-    printf("OK\n");
-    
+    closelog();
     return 0;
 }

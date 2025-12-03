@@ -29,9 +29,3 @@ static inline float floatAvgVal(float* data, uint32_t count) {
         result += data[i];
     return result / count;
 }
-
-static inline void LogPack(uint32_t id, char* str) {
-    printf("PACK%u: ",id);
-    printf(str);
-    printf("\n");
-}

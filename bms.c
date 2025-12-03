@@ -1,6 +1,7 @@
 #include <stdint.h>
 #include <float.h>
 #include <stdio.h>
+#include <syslog.h>
 
 #include "globalconst.h"
 #include "spi.h"
@@ -314,7 +315,7 @@ void bms_CyclicTask(uint32_t id) {
              * NEIN -> Warte
              *********************************************/
             if (AFECheckPowerupComplete()) { 
-                printf("PACK%u: PB7170 gefunden, initialisiere...\n", PACK_PDO.id);
+                syslog(LOG_INFO, "PACK%u: PB7170 gefunden, initialisiere...", PACK_PDO.id);
                 AFESafeMode();
                 PACK_PDO.stateMachine = AFE_STATE_INIT;
             }
@@ -326,10 +327,10 @@ void bms_CyclicTask(uint32_t id) {
              * NEIN -> Fehler
              *********************************************/
             if (AFEInit(id) == 0) {
-                printf("PACK%u: Userconfig erfolgreich geschrieben\n", PACK_PDO.id);
+                syslog(LOG_INFO, "PACK%u: Userconfig erfolgreich geschrieben", PACK_PDO.id);
                 PACK_PDO.stateMachine = AFE_STATE_WAIT_DIAG0;
             } else {
-                printf("PACK%u: Fehler beim Schreiben der Userconfig\n", PACK_PDO.id);
+                syslog(LOG_INFO, "PACK%u: Fehler beim Schreiben der Userconfig", PACK_PDO.id);
                 PACK_PDO.stateMachine = AFE_STATE_ERROR;
                 break;
             }
@@ -383,11 +384,11 @@ void bms_CyclicTask(uint32_t id) {
             diagLock = 0;
 
             if(AFEWireDiag(diagData)) {
-                printf("PACK%u: Diagnose fehlerhaft, deaktiviere Pack\n", PACK_PDO.id);
+                syslog(LOG_ALERT, "PACK%u: Diagnose fehlerhaft, deaktiviere Pack", PACK_PDO.id);
                 PACK_PDO_SWALERTFLAG_BITS.DIAG_ERR = 1;
                 PACK_PDO.stateMachine = AFE_STATE_ERROR;
             } else {
-                printf("PACK%u: Diagnose erfolgreich\n", PACK_PDO.id);
+                syslog(LOG_INFO, "PACK%u: Diagnose erfolgreich", PACK_PDO.id);
                 PACK_PDO.stateMachine = AFE_STATE_CONFIG;
             }
             break;
@@ -398,7 +399,7 @@ void bms_CyclicTask(uint32_t id) {
              *********************************************/
             AFEClearAllErrors();
             AFEWatchdogEnable();
-            printf("PACK%u: Konfiguration fertig, RUN-Mode\n", PACK_PDO.id);
+            syslog(LOG_INFO, "PACK%u: Konfiguration fertig, RUN-Mode\n", PACK_PDO.id);
             
             PACK_PDO.stateMachine = AFE_STATE_RUN;
             break;
@@ -407,7 +408,7 @@ void bms_CyclicTask(uint32_t id) {
              * Register prüfen
              *********************************************/
             if(!AFECheckPowerupComplete() && AFEVerifyUser(id)) {
-                printf("PACK%u: Sanity-Check fehlerhaft, deaktiviere Pack\n", PACK_PDO.id);
+                syslog(LOG_ALERT, "PACK%u: Sanity-Check fehlerhaft, deaktiviere Pack\n", PACK_PDO.id);
                 PACK_PDO_SWALERTFLAG_BITS.CHIPSTATE_ERR = 1;
                 PACK_PDO.stateMachine = AFE_STATE_ERROR;
             } else {

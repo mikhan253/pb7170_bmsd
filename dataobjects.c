@@ -6,6 +6,7 @@
 #include <fcntl.h>      // für shm_open
 #include <sys/mman.h>   // für mmap
 #include <unistd.h>     // für ftruncate
+#include <syslog.h>
 #include "dataobjects.h"
 
 #define SHMEM_BATTERYPDO "/battery_pdo_shm"
@@ -42,7 +43,7 @@ static void* LoadBinaryFile(
         return NULL;
 
     if (require_exact_size && (size_t)st.st_size != element_size) {
-        printf("'%s' hat falsche Größe: erwartet %zu, ist %ld Bytes\n",
+        syslog(LOG_ERR, "'%s' hat falsche Größe: erwartet %zu, ist %ld Bytes",
                filename, element_size, (long)st.st_size);
         return NULL;
     }
@@ -93,9 +94,9 @@ static void* LoadBinaryFile(
 // Helferfunktion für Statusmeldungen
 static void PrintLoadState(const char* filename, int duplicate_of) {
     if (duplicate_of >= 0)
-        printf("- %s identisch mit pack%d\n", filename, duplicate_of);
+        syslog(LOG_INFO, "- %s identisch mit pack%d", filename, duplicate_of);
     else
-        printf("- %s geladen\n", filename);
+        syslog(LOG_INFO, "- %s geladen", filename);
 }
 
 // ---------------------------------------------------------
@@ -123,7 +124,7 @@ static int InitShmem(void** target, const char* name, size_t size) {
     }
 
     memset(*target, 0, size); // Speicher initialisieren
-    printf("- ShMem: %s (size=%zu)\n", name, size);
+    syslog(LOG_INFO, "- ShMem: %s (size=%zu)", name, size);
     close(shm_fd);
     return 0;
 }
@@ -136,7 +137,7 @@ int dob_LoadPackConfigs(void)
 
     // -----------------------------------------------------
     // GlobalConfig laden
-    printf("Lade globale Konfigurationsdatei...\n");
+    syslog(LOG_INFO, "Lade globale Konfigurationsdatei...");
     snprintf(filename, sizeof(filename), "conf/global.bin");
     duplicate_of = -1;
     void* global_buf = LoadBinaryFile(
@@ -149,25 +150,25 @@ int dob_LoadPackConfigs(void)
         1    // exakte Größe erforderlich
     );
     if (!global_buf) {
-        printf("Fehler: '%s' konnte nicht geladen werden oder hat falsche Größe.\n", filename);
+        syslog(LOG_ERR, "'%s' konnte nicht geladen werden oder hat falsche Größe.\n", filename);
         return -1;
     }
     g_GlobalConfig = *(GLOBAL_CONF_t*)global_buf;
     free(global_buf);
-    printf("- %s geladen\n", filename);
+    syslog(LOG_INFO, "- %s geladen\n", filename);
 
     // -----------------------------------------------------
     // Shared Memory für PDO: globalPDO + PackPDO
     size_t numPacks = g_GlobalConfig.numberOfPacks;
     if (numPacks == 0 || numPacks > MAX_BATTERY_PACKS) {
-        printf("Fehler: Ungültige Anzahl Packs in global config: %zu\n", numPacks);
+        syslog(LOG_ERR, "Ungültige Anzahl Packs in global config: %zu\n", numPacks);
         return -1;
     }
 
     size_t shmSize = sizeof(GLOBAL_PDO_t) + sizeof(PACK_PDO_t) * numPacks;
     void* shm_ptr = NULL;
     if (InitShmem(&shm_ptr, SHMEM_BATTERYPDO, shmSize) != 0) {
-        printf("Fehler: SHMEM_PDO konnte nicht initialisiert werden.\n");
+        syslog(LOG_ERR, "SHMEM_PDO konnte nicht initialisiert werden.\n");
         return -1;
     }
 
@@ -177,13 +178,13 @@ int dob_LoadPackConfigs(void)
     // -----------------------------------------------------
     // Shared Memory für SDO
     if (InitShmem((void**)&g_PackSdoData, SHMEM_BATTERYSDO, sizeof(PACK_SDO_t) * numPacks) != 0) {
-        printf("Fehler: SHMEM_SDO konnte nicht initialisiert werden.\n");
+        syslog(LOG_ERR, "SHMEM_SDO konnte nicht initialisiert werden.\n");
         return -1;
     }
 
     g_packEnabled = 0;
 
-    printf("Lade Konfigurationsdateien...\n");
+    syslog(LOG_INFO, "Lade Konfigurationsdateien...\n");
     for (int i = 0; i < numPacks; i++) {
         g_PackPdoData[i].stateMachine = AFE_STATE_DISABLED;
 
@@ -237,7 +238,7 @@ int dob_LoadPackConfigs(void)
 
     for (int i = 0; i < numPacks; i++)
         if (g_packEnabled & (1 << i))
-            printf("Pack %d aktiviert\n", i);
+            syslog(LOG_INFO, "Pack %d aktiviert\n", i);
 
     // GlobalPdoData initialisieren
     g_GlobalPdoData->numberOfPacks = g_GlobalConfig.numberOfPacks;
